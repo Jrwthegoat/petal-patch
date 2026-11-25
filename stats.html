@@ -44,6 +44,10 @@
         <div class="card"><b>${st.streak.count}</b>streak (best ${st.streak.best})</div>
         <div class="card"><b>${st.garden.unlocked.length}/${FLOWERS.length}</b>flower kinds</div>
         <div class="card"><b>${asked}</b>sphinx questions seen (${missed} due again)</div>
+        <div class="card"><b>${s.sphinx.visits}</b>sphinx visits</div>
+        <div class="card"><b>${s.sphinx.firstTry}</b>right at the first try</div>
+        <div class="card"><b>${s.sphinx.secondTry}</b>right at the second try</div>
+        <div class="card"><b>${s.sphinx.sculptures}</b>sculptures finished</div>
       </div>
       <p><b>First day:</b> ${s.firstDay || "none yet"}<br><b>Day 7:</b> ${day7}</p>
       <table><thead><tr><th>Day</th><th class="n">Rounds</th><th class="n">Cleared</th></tr></thead><tbody>${rows || `<tr><td colspan="3">No rounds yet.</td></tr>`}</tbody></table>`;

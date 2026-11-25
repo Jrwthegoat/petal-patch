@@ -155,6 +155,56 @@ button {
 .locked-flower { opacity: 0.55; filter: saturate(0.7); }
 .lock { font-family: var(--emoji); font-size: 18px; }
 
+/* ---- sphinx corner ---- */
+.sphinx-strip {
+  margin: 0 12px 8px;
+  padding: 4px 12px 4px 4px;
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 18px;
+  border: 2px solid #d9cfe6;
+  background: #f3eff8;
+  text-align: left;
+}
+.sphinx-strip .sphinx { width: 92px; height: 69px; flex: none; }
+.sphinx-strip .sx-text { flex: 1; display: flex; flex-direction: column; line-height: 1.2; font-size: 17px; color: var(--ink-soft); }
+.sphinx-strip .sx-text b { font-size: 19px; color: #4a3a6a; }
+.sphinx-strip .sx-text small { font-size: 15px; font-weight: 700; color: var(--leaf-dark); margin-top: 2px; }
+.sphinx-strip.awake {
+  background: #fff1c2;
+  border-color: #d8a92e;
+  box-shadow: 0 3px 0 #d8a92e;
+  animation: awakeglow 2.2s ease-in-out infinite;
+}
+.sphinx-strip.awake .sx-text b { color: #8a4a00; font-size: 21px; }
+.sphinx-strip.awake .sphinx { animation: bob 1.8s ease-in-out infinite; }
+.sphinx-strip:active { transform: translateY(2px); }
+@keyframes awakeglow { 0%, 100% { box-shadow: 0 3px 0 #d8a92e, 0 0 0 0 rgba(245, 184, 46, 0); } 50% { box-shadow: 0 3px 0 #d8a92e, 0 0 0 6px rgba(245, 184, 46, 0.45); } }
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+.sphinx.asleep { filter: saturate(0.75); }
+.zzz text { animation: zfloat 3s ease-in-out infinite; }
+.zzz text:nth-child(2) { animation-delay: 0.5s; }
+.zzz text:nth-child(3) { animation-delay: 1s; }
+@keyframes zfloat { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+
+/* ---- sculptures ---- */
+.sc-ghost { opacity: 0.7; }
+.sc-ghost * { fill: rgba(255, 255, 255, 0.35); stroke: #6b6355; stroke-dasharray: 3 3; stroke-width: 1.4; }
+.sc-new { transform-box: fill-box; transform-origin: 50% 100%; animation: drop 0.9s cubic-bezier(0.2, 1.4, 0.4, 1) 0.35s both; }
+@keyframes drop { 0% { transform: translateY(-40px); opacity: 0; } 60% { opacity: 1; } 100% { transform: none; opacity: 1; } }
+.sheet .sx-pair { display: flex; justify-content: center; align-items: flex-end; gap: 4px; }
+.sheet .sx-pair .sphinx { width: 170px; height: 128px; }
+.sheet .sx-goal { width: 90px; height: 108px; }
+.sheet .sx-art .sculpture { width: 150px; height: 180px; }
+.sheet .sx-visit { animation: nudge 2.4s ease-in-out infinite; }
+.sheet .news.sphinx-news { background: #fff1c2; border-color: #d8a92e; }
+.sculpture-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sculpture-grid figure { margin: 0; text-align: center; font-size: 16px; line-height: 1.25; font-weight: 600; color: var(--ink-soft); }
+.sculpture-grid figure b { color: var(--ink); font-size: 17px; }
+.sculpture-grid svg { width: 100%; height: auto; max-height: 120px; }
+
 /* ---- garden ---- */
 .garden-scroll {
   flex: 1;

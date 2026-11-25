@@ -3,7 +3,19 @@
 import { dayKeyFromNumber } from "./dates.js";
 
 export function emptyStats() {
-  return { firstDay: null, days: {} };
+  return { firstDay: null, days: {}, sphinx: emptySphinxStats() };
+}
+
+function emptySphinxStats() {
+  return { visits: 0, firstTry: 0, secondTry: 0, sculptures: 0 };
+}
+
+// field: visits | firstTry | secondTry | sculptures
+export function recordSphinxStat(stats, field) {
+  const s = { ...emptyStats(), ...stats };
+  const sp = { ...emptySphinxStats(), ...s.sphinx };
+  sp[field] += 1;
+  return { ...s, sphinx: sp };
 }
 
 function bump(stats, day, field) {
@@ -35,5 +47,6 @@ export function summary(stats) {
     totals,
     rows,
     day7,
+    sphinx: { ...emptySphinxStats(), ...s.sphinx },
   };
 }

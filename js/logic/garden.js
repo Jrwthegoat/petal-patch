@@ -128,7 +128,8 @@ export function recordWin(garden, today, { special = null } = {}) {
   return { garden: g, planted, newKind, newSets };
 }
 
-// The sphinx chest: the next visitor moves in; after all have come, a bonus flower.
+// The daily chest: the first win of each day opens it, no question asked.
+// The next visitor moves in; after all have come, a bonus flower.
 export function openChest(garden, today) {
   const g = { ...emptyGarden(), ...garden };
   const next = VISITORS.find((v) => !g.visitors.includes(v.id));
@@ -140,4 +141,15 @@ export function openChest(garden, today) {
   const k = pool[hashString(`chest-${today}`) % pool.length];
   g.planted = g.planted.concat({ k, d: today });
   return { garden: g, visitor: null, flower: k };
+}
+
+// Is today's chest waiting? Only after a win today, and only once a day.
+export function chestReady(lastWinDay, chestDay, today) {
+  return lastWinDay === today && chestDay !== today;
+}
+
+// Open today's chest if it is waiting. Returns { opened, chestDay, garden, visitor, flower }.
+export function openDailyChest(garden, { lastWinDay, chestDay }, today) {
+  if (!chestReady(lastWinDay, chestDay, today)) return { opened: false, chestDay, garden, visitor: null, flower: null };
+  return { opened: true, chestDay: today, ...openChest(garden, today) };
 }

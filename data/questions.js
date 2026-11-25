@@ -13,8 +13,8 @@
 //   answer    "myth" or "fact"
 //   explain   shown after any answer; one or two short sentences
 //
-// Order matters: new players meet the questions in this order. Questions a
-// player misses come back two days later.
+// Order matters: new players meet the questions in this order. A question a
+// player misses at the first try comes back after three other questions.
 
 export default [
   {
