@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:,">
+  <title>Petal Patch: play record on this phone</title>
+  <style>
+    body { margin: 0; padding: 16px; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; font-size: 19px; color: #2b2118; background: #fff8ec; }
+    h1 { font-size: 26px; margin: 0 0 4px; color: #24502a; }
+    .note { color: #5a4a3a; font-size: 16px; margin: 0 0 16px; }
+    .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+    .card { background: #fffdf7; border: 2px solid #e3d6bf; border-radius: 14px; padding: 10px 12px; }
+    .card b { display: block; font-size: 28px; }
+    table { width: 100%; border-collapse: collapse; background: #fffdf7; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid #e3d6bf; text-align: left; }
+    th { background: #f1e6d0; }
+    td.n, th.n { text-align: right; }
+    button { font: inherit; min-height: 52px; padding: 8px 16px; border-radius: 14px; border: 2px solid #b9a98a; background: #fff; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Play record</h1>
+  <p class="note">Kept on this phone only. Nothing on this page is sent anywhere.</p>
+  <div id="out"></div>
+  <button id="reset">Start over on this phone</button>
+  <script type="module">
+    import { load, KEY } from "./js/store.js";
+    import { summary } from "./js/logic/stats.js";
+    import { FLOWERS } from "./js/logic/garden.js";
+
+    const st = load();
+    const s = summary(st.stats);
+    const missed = Object.values(st.sphinx.recs || {}).filter((r) => r.missed).length;
+    const asked = Object.keys(st.sphinx.recs || {}).length;
+    const day7 = s.day7 ? `${s.day7.day}: ${s.day7.cleared ? "cleared a board" : s.day7.played ? "played, no board cleared" : "not played (yet)"}` : "not started";
+    const rows = s.rows.slice().reverse().map((r) => `<tr><td>${r.day}</td><td class="n">${r.rounds}</td><td class="n">${r.wins}</td></tr>`).join("");
+    document.getElementById("out").innerHTML = `
+      <div class="cards">
+        <div class="card"><b>${s.daysPlayed}</b>days played</div>
+        <div class="card"><b>${s.totals.rounds}</b>rounds started</div>
+        <div class="card"><b>${s.totals.wins}</b>boards cleared</div>
+        <div class="card"><b>${st.streak.count}</b>streak (best ${st.streak.best})</div>
+        <div class="card"><b>${st.garden.unlocked.length}/${FLOWERS.length}</b>flower kinds</div>
+        <div class="card"><b>${asked}</b>sphinx questions seen (${missed} due again)</div>
+      </div>
+      <p><b>First day:</b> ${s.firstDay || "none yet"}<br><b>Day 7:</b> ${day7}</p>
+      <table><thead><tr><th>Day</th><th class="n">Rounds</th><th class="n">Cleared</th></tr></thead><tbody>${rows || `<tr><td colspan="3">No rounds yet.</td></tr>`}</tbody></table>`;
+
+    document.getElementById("reset").addEventListener("click", () => {
+      if (!confirm("Start the game over on this phone? A backup of the old garden is kept in this browser.")) return;
+      const raw = localStorage.getItem(KEY);
+      if (raw) localStorage.setItem(`${KEY}.backup-${Date.now()}`, raw);
+      localStorage.removeItem(KEY);
+      location.reload();
+    });
+  </script>
+</body>
+</html>

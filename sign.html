@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:,">
+  <title>Petal Patch: this week's code</title>
+  <style>
+    @page { size: letter portrait; margin: 0.5in; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #2b2118; background: #f3ead8; }
+    .sign {
+      max-width: 8in; margin: 20px auto; background: #fffdf7; border: 10px solid #8cc56b; border-radius: 36px;
+      padding: 36px 40px; text-align: center;
+    }
+    h1 { font-family: Georgia, "Times New Roman", serif; color: #24502a; font-size: 56px; margin: 0; }
+    .lead { font-size: 30px; margin: 8px 0 20px; font-weight: 600; }
+    .code {
+      font-size: clamp(40px, 13vw, 84px); font-weight: 900; letter-spacing: 4px; color: #2b2118;
+      background: #fff1c2; border: 5px dashed #d8a92e; border-radius: 28px; padding: 18px 10px; margin: 0 0 14px;
+      line-height: 1.05;
+    }
+    .dates { font-size: 26px; font-weight: 700; color: #5a4a3a; }
+    .flower { display: flex; align-items: center; justify-content: center; gap: 18px; margin: 22px 0; }
+    .flower svg { width: 130px; height: 156px; }
+    .flower p { font-size: 28px; text-align: left; margin: 0; max-width: 4.2in; }
+    ol { text-align: left; font-size: 28px; line-height: 1.5; margin: 10px auto; max-width: 5.6in; }
+    .addr { font-size: 22px; margin-top: 18px; word-break: break-all; color: #5a4a3a; }
+    .controls { max-width: 8in; margin: 0 auto 30px; padding: 0 10px; font-size: 18px; }
+    .controls button, .controls a { font: inherit; display: inline-block; margin: 4px 8px 4px 0; padding: 10px 16px; border-radius: 12px; border: 2px solid #b9a98a; background: #fff; color: #2b2118; text-decoration: none; cursor: pointer; }
+    .controls .email { margin-top: 10px; word-break: break-all; }
+    .controls code { background: #fff; padding: 4px 8px; border-radius: 8px; }
+    @media print {
+      body { background: #fff; }
+      .controls { display: none; }
+      .sign { margin: 0 auto; border-width: 8px; page-break-after: always; }
+    }
+  </style>
+</head>
+<body>
+  <main id="sign"></main>
+  <div class="controls" id="controls"></div>
+  <script type="module">
+    import { weeklyCode } from "./js/logic/weekly.js";
+    import { dayKeyOf, dayNumber, weekNumber, weekStartDay, prettyDay } from "./js/logic/dates.js";
+    import { specialForWeek } from "./js/logic/garden.js";
+    import { flowerSVG } from "./js/art.js";
+
+    const p = new URLSearchParams(location.search);
+    const d = p.get("date") ? dayNumber(p.get("date")) : dayNumber(dayKeyOf(new Date()));
+    const offset = p.get("week") === "next" ? 1 : 0;
+    const week = weekNumber(d) + offset;
+    const start = weekStartDay(week);
+    const code = weeklyCode(week);
+    const sp = specialForWeek(week);
+    const game = new URL("index.html", location.href);
+    game.search = "";
+    const email = `${game.href}?code=${code.replace(/\s+/g, "")}`;
+
+    document.getElementById("sign").innerHTML = `
+      <div class="sign">
+        <h1>Petal Patch</h1>
+        <div class="lead">This week's garden code</div>
+        <div class="code">${code}</div>
+        <div class="dates">Works ${prettyDay(start, { weekday: true })} to ${prettyDay(start + 6, { weekday: true })}</div>
+        <div class="flower">${flowerSVG(sp)}<p>Type it in the game to grow a <b>${sp.name}</b>.</p></div>
+        <ol>
+          <li>Open Petal Patch on your phone.</li>
+          <li>Tap <b>I have a code</b>.</li>
+          <li>Type the code above.</li>
+        </ol>
+        <div class="addr">${game.href}</div>
+      </div>`;
+
+    document.getElementById("controls").innerHTML = `
+      <button onclick="print()">Print this sign</button>
+      ${offset ? `<a href="sign.html">This week's sign</a>` : `<a href="sign.html?week=next">Next week's sign</a>`}
+      <div class="email">Email link for this week (opens the game with the code already filled in):<br><code>${email}</code></div>
+      <p>Left open on a lobby screen, this page changes to the new code by itself every Monday.</p>`;
+
+    // On a lobby screen: reload a minute after midnight so Monday's code appears without anyone touching it.
+    const now = new Date();
+    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 1, 0);
+    setTimeout(() => location.reload(), next - now);
+  </script>
+</body>
+</html>
