@@ -26,7 +26,11 @@
     .flower svg { width: 130px; height: 156px; }
     .flower p { font-size: 28px; text-align: left; margin: 0; max-width: 4.2in; }
     ol { text-align: left; font-size: 28px; line-height: 1.5; margin: 10px auto; max-width: 5.6in; }
-    .addr { font-size: 22px; margin-top: 18px; word-break: break-all; color: #5a4a3a; }
+    .scan { display: flex; align-items: center; justify-content: center; gap: 28px; margin: 24px 0 6px; flex-wrap: wrap; }
+    .qr { width: 3in; max-width: 78vw; background: #fff; border: 4px solid #2b2118; border-radius: 16px; padding: 6px; line-height: 0; }
+    .qr svg { width: 100%; height: auto; display: block; }
+    .scan ol { max-width: 3.6in; margin: 0; }
+    .already { font-size: 22px; margin-top: 10px; color: #5a4a3a; }
     .controls { max-width: 8in; margin: 0 auto 30px; padding: 0 10px; font-size: 18px; }
     .controls button, .controls a { font: inherit; display: inline-block; margin: 4px 8px 4px 0; padding: 10px 16px; border-radius: 12px; border: 2px solid #b9a98a; background: #fff; color: #2b2118; text-decoration: none; cursor: pointer; }
     .controls .email { margin-top: 10px; word-break: break-all; }
@@ -41,7 +45,9 @@
 <body>
   <main id="sign"></main>
   <div class="controls" id="controls"></div>
+  <script src="js/vendor/qrcode.js"></script>
   <script type="module">
+    import { GAME_URL } from "./js/config.js";
     import { weeklyCode } from "./js/logic/weekly.js";
     import { dayKeyOf, dayNumber, weekNumber, weekStartDay, prettyDay } from "./js/logic/dates.js";
     import { specialForWeek } from "./js/logic/garden.js";
@@ -54,9 +60,16 @@
     const start = weekStartDay(week);
     const code = weeklyCode(week);
     const sp = specialForWeek(week);
-    const game = new URL("index.html", location.href);
+    const game = GAME_URL ? new URL(GAME_URL) : new URL("./", location.href);
     game.search = "";
+    game.hash = "";
     const email = `${game.href}?code=${code.replace(/\s+/g, "")}`;
+
+    // QR for the code link, drawn here in the page (no outside service).
+    const qr = qrcode(0, "M");
+    qr.addData(email);
+    qr.make();
+    const qrSvg = qr.createSvgTag({ cellSize: 8, margin: 4, scalable: true });
 
     document.getElementById("sign").innerHTML = `
       <div class="sign">
@@ -64,16 +77,20 @@
         <div class="lead">This week's garden code</div>
         <div class="code">${code}</div>
         <div class="dates">Works ${prettyDay(start, { weekday: true })} to ${prettyDay(start + 6, { weekday: true })}</div>
-        <div class="flower">${flowerSVG(sp)}<p>Type it in the game to grow a <b>${sp.name}</b>.</p></div>
-        <ol>
-          <li>Open Petal Patch on your phone.</li>
-          <li>Tap <b>I have a code</b>.</li>
-          <li>Type the code above.</li>
-        </ol>
-        <div class="addr">${game.href}</div>
+        <div class="scan">
+          <div class="qr" role="img" aria-label="QR code that opens the game with this week's code">${qrSvg}</div>
+          <ol>
+            <li>Point your phone's camera at the square.</li>
+            <li>Tap the link that pops up.</li>
+            <li>The game opens with this week's code already in.</li>
+          </ol>
+        </div>
+        <div class="flower">${flowerSVG(sp)}<p>Clear the bonus board to grow a <b>${sp.name}</b>.</p></div>
+        <div class="already">Already playing? Tap <b>I have a code</b> and type the code above.</div>
       </div>`;
 
-    document.getElementById("controls").innerHTML = `
+    // Staff tools (print button, email link) show only with ?staff=1, so a lobby screen shows the sign alone.
+    if (p.get("staff") === "1") document.getElementById("controls").innerHTML = `
       <button onclick="print()">Print this sign</button>
       ${offset ? `<a href="sign.html">This week's sign</a>` : `<a href="sign.html?week=next">Next week's sign</a>`}
       <div class="email">Email link for this week (opens the game with the code already filled in):<br><code>${email}</code></div>
