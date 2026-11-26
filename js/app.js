@@ -7,13 +7,17 @@ import { dayKeyOf, dayNumber, weekNumber } from "./logic/dates.js";
 import { recordPlay, streakView } from "./logic/streak.js";
 import { checkCode } from "./logic/weekly.js";
 import { recordBoard, boardsUntilAwake, startVisit, answer } from "./logic/sphinx.js";
-import { PIECES, sculptureView, addHalves, collectionRows, piecesText } from "./logic/sculpture.js";
+import { PIECES, sculptureView, addHalves, collectionRows, piecesText, displayName, progressLabel, rewardText, SURPRISE_NAME } from "./logic/sculpture.js";
 import { FLOWERS, SETS, SPECIALS, VISITORS, recordWin, nextLocked, chestReady, openDailyChest, specialForWeek, flowerById } from "./logic/garden.js";
 import { recordRound, recordWinStat, recordSphinxStat } from "./logic/stats.js";
 import QUESTIONS from "../data/questions.js";
 import * as store from "./store.js";
 import { sfx, unlock, setMuted } from "./audio.js";
-import { flowerSVG, gardenSVG, sphinxSVG, chestSVG, sculptureSVG } from "./art.js";
+import { flowerSVG, gardenScene, homeScene, chestSVG, sculptureSVG, coveredSVG } from "./art.js";
+import { SKIN } from "./skin.js";
+
+// The question-asker of this skin (in the garden: Old Moss the gnome).
+const ASKER = SKIN.asker;
 
 // Tile symbols. Each has its own background tint so kinds differ by colour
 // as well as by picture.
@@ -140,31 +144,55 @@ function renderGarden() {
   const newVisitors = st.garden.visitors.slice(st.seenVisitors);
   const sv = sculptureView(st.sculpture);
   const newPiece = sv.pieces > st.seenPieces;
-  $("garden-scene").innerHTML = gardenSVG(st.garden, { highlightFrom: from, newVisitors, sculpture: sv, newPiece });
+  homeOpts = { highlightFrom: from, newVisitors, sculpture: sv, newPiece, sculptureName };
+  homeDrawnAt = Date.now();
+  homeUnits = 0;
+  fitHome();
   const grew = st.garden.planted.length > from || newVisitors.length > 0;
   st.seenPlanted = st.garden.planted.length;
   st.seenVisitors = st.garden.visitors.length;
   st.seenPieces = sv.pieces;
   renderSphinxStrip();
   save();
-  if (grew) {
-    const target = $("garden-scene").querySelector(`[data-i="${from}"]`);
-    setTimeout(() => {
-      if (target && newVisitors.length === 0) target.scrollIntoView({ block: "center", behavior: "smooth" });
-      else $("garden-scroll").scrollTo({ top: 0, behavior: "smooth" });
-      sfx.bloom();
-    }, 150);
-  }
+  if (grew) setTimeout(() => sfx.bloom(), 150);
 
   const n = nextRef();
   $("play-btn").textContent = n.label;
   $("chest-btn").classList.toggle("hidden", !chestReady(st.lastWinDay, st.chestDay, d));
 }
 
-// The sphinx corner above the garden: asleep with a count, or awake and waiting.
+// The home screen shows a short vignette of the garden sized to fit its
+// frame: the landscape, the sculpture being carved and the newest flowers,
+// nothing cut in half, sky filling any room above (homeScene in art.js). The
+// full view shows everything.
+let homeOpts = null;
+let homeUnits = 0;
+let homeDrawnAt = 0;
+
+function fitHome() {
+  const box = $("garden-scene");
+  if (!homeOpts || !box.clientWidth || !box.clientHeight) return;
+  const units = (box.clientHeight * 360) / box.clientWidth;
+  if (Math.abs(units - homeUnits) < 0.5) return;
+  homeUnits = units;
+  // Blooms and arrivals play once; a later resize redraws them still.
+  const opts = Date.now() - homeDrawnAt < 2500 ? homeOpts : { ...homeOpts, highlightFrom: Infinity, newVisitors: [], newPiece: false };
+  const v = homeScene(st.garden, opts, units);
+  $("garden-scene").innerHTML = `<svg class="garden-svg" viewBox="${v.viewBox}" preserveAspectRatio="xMidYMax meet" role="img" aria-label="Your garden. Tap to see all of it.">${v.svg}</svg>`;
+}
+if (window.ResizeObserver) new ResizeObserver(() => fitHome()).observe($("garden-scene"));
+
+// What to call a sculpture in the garden: finished ones by name; the one being
+// carved stays a surprise.
+function sculptureName(it) {
+  return it.done ? it.name : `${displayName(it)}, ${piecesText(it.built, it.half)}`;
+}
+
+// The question-asker's corner above the garden: napping with a count, or
+// awake with a question.
 function building() {
   const c = sculptureView(st.sculpture).current;
-  return { ...c, progress: piecesText(c.built, c.half) };
+  return { ...c, progress: piecesText(c.built, c.half), label: progressLabel(c) };
 }
 
 function renderSphinxStrip() {
@@ -173,10 +201,10 @@ function renderSphinxStrip() {
   const b = building();
   const btn = $("sphinx-btn");
   btn.classList.toggle("awake", awake);
-  const title = awake ? "The sphinx is awake!" : "The sphinx is asleep";
-  const line = awake ? "Tap to answer its riddle" : `Wakes in ${n} more board${n === 1 ? "" : "s"}`;
-  btn.innerHTML = `${sphinxSVG({ asleep: !awake })}<span class="sx-text"><b>${title}</b><span>${line}</span><small>${esc(b.name)}: ${b.progress}</small></span>`;
-  btn.setAttribute("aria-label", `${title} ${line}. ${b.name}: ${b.progress} pieces.`);
+  const title = awake ? ASKER.awakeTitle : ASKER.asleepTitle;
+  const line = awake ? ASKER.awakeLine : ASKER.asleepLine(n);
+  btn.innerHTML = `${ASKER.art({ asleep: !awake })}<span class="sx-text"><b>${title}</b><span>${line}</span><small>${esc(b.label)}</small></span>`;
+  btn.setAttribute("aria-label", `${title} ${line} ${b.label}.`);
 }
 
 function goGarden() {
@@ -478,7 +506,7 @@ function onWin() {
 // The buttons after a win or a chest: keep playing, visit the sphinx if it
 // is awake (never required), or go to the garden.
 function nextButtons() {
-  const sphinx = st.sphinx.awake ? `<button class="btn gold big sx-visit" data-act="sphinx">Visit the sphinx</button>` : "";
+  const sphinx = st.sphinx.awake ? `<button class="btn gold big sx-visit" data-act="sphinx">${ASKER.visitButton}</button>` : "";
   return {
     html: `<button class="btn primary big" data-act="next">Play next board</button>
        ${sphinx}
@@ -492,11 +520,9 @@ function nextButtons() {
 }
 
 function sphinxNote(woke) {
-  const b = building();
-  if (woke) return `<div class="news sphinx-news"><b>The sphinx woke up!</b> Answer its riddle to add a piece to your ${esc(b.name)}.</div>`;
-  if (st.sphinx.awake) return `<p class="note">The sphinx is awake and waiting for you.</p>`;
-  const n = boardsUntilAwake(st.sphinx);
-  return `<p class="note">The sphinx wakes in ${n} more board${n === 1 ? "" : "s"}.</p>`;
+  if (woke) return `<div class="news sphinx-news">${ASKER.wokeNews}</div>`;
+  if (st.sphinx.awake) return `<p class="note">${ASKER.waitingNote}</p>`;
+  return `<p class="note">${ASKER.sleepingNote(boardsUntilAwake(st.sphinx))}</p>`;
 }
 
 function showWin(res, { chestDue, special, woke }) {
@@ -570,10 +596,11 @@ function showChest() {
   });
 }
 
-// ---------------------------------------------------------------- the sphinx
+// ---------------------------------------------------------------- the question-asker
+// Called "sphinx" in the code; the player meets the skin's asker (Old Moss).
 
 function sculptureFor(view, opts = {}) {
-  return sculptureSVG(view.sculpture.id, { gold: view.gold, built: view.built, half: view.half, label: view.name, ...opts });
+  return sculptureSVG(view.sculpture.id, { gold: view.gold, built: view.built, half: view.half, label: `${displayName(view)}, ${piecesText(view.built, view.half)}`, ...opts });
 }
 
 function showSphinx() {
@@ -589,10 +616,10 @@ function showSphinx() {
   const b = building();
   const draft = q.status === "DRAFT" ? `<div class="draft-tag">DRAFT</div><br>` : "";
   sheet(
-    `<div class="sx-pair">${sphinxSVG()}${sculptureFor(b, { cls: "sx-goal" })}</div>
-     <h2>The Garden Sphinx</h2>
-     <p>"Answer my riddle and I will add to your ${esc(b.name)}."</p>
-     <div class="riddle">${draft}Myth or fact?<br>“${esc(q.statement)}”</div>
+    `<div class="sx-pair">${ASKER.art()}${sculptureFor(b, { cls: "sx-goal" })}</div>
+     <h2>${ASKER.askHeading}</h2>
+     <p>${ASKER.askLine}</p>
+     <div class="riddle">${draft}Myth or fact?<br>\u201C${esc(q.statement)}\u201D</div>
      <div class="answer-row">
        <button class="btn primary" data-act="myth">Myth</button>
        <button class="btn primary" data-act="fact">Fact</button>
@@ -610,10 +637,10 @@ function showSphinxAsleep() {
   const n = boardsUntilAwake(st.sphinx);
   const b = building();
   sheet(
-    `<div class="sx-pair">${sphinxSVG({ asleep: true })}${sculptureFor(b, { cls: "sx-goal" })}</div>
-     <h2>The sphinx is napping</h2>
-     <p>Clear <b>${n} more board${n === 1 ? "" : "s"}</b> and it wakes with a riddle.</p>
-     <p class="note">Each right answer adds a piece to your ${esc(b.name)} (${b.progress} so far).</p>
+    `<div class="sx-pair">${ASKER.art({ asleep: true })}${sculptureFor(b, { cls: "sx-goal" })}</div>
+     <h2>${ASKER.napHeading}</h2>
+     <p>${ASKER.napLine(n)}</p>
+     <p class="note">${ASKER.napNote(b.progress)}</p>
      <div class="stack">
        <button class="btn primary big" data-act="play">Play a board</button>
        <button class="btn link" data-act="close">Close</button>
@@ -641,7 +668,7 @@ function onAnswer(choice) {
     save();
     sfx.wrong();
     sheet(
-      `${sphinxSVG()}
+      `${ASKER.art()}
        <div class="verdict soft">Not quite.</div>
        <p>It's a <b>${q.answer}</b>.</p>
        <div class="riddle">${draft}${esc(q.explain)}</div>
@@ -657,30 +684,37 @@ function onAnswer(choice) {
   save();
   sfx.right();
 
-  let art;
-  let news;
-  if (add.finished) {
-    const f = add.finished;
-    const next = add.after.current;
-    art = sculptureSVG(f.sculpture.id, { gold: f.gold, built: PIECES, newPart: PIECES - 1, label: f.name, cls: "sx-reward" });
-    const loop = next.gold && !f.gold ? " Next, the whole set again, in gold." : "";
-    news = `<div class="news gold"><b>Your ${esc(f.name)} is finished!</b> It stays in your garden for good.</div>
-      <p>Next up: <b>${esc(next.name)}</b>.${loop}</p>`;
-  } else if (add.placed) {
-    const v = add.after.current;
-    art = sculptureFor(v, { newPart: add.placed.partIndex, cls: "sx-reward" });
-    news = res.firstTry
-      ? `<div class="news"><b>A whole piece!</b> The ${esc(add.placed.part)} is on your ${esc(v.name)}.</div>`
-      : `<div class="news"><b>Two halves make a whole!</b> The ${esc(add.placed.part)} is on your ${esc(v.name)}.</div>
-         <p class="note">Get it first try for a whole one.</p>`;
-    news += `<p class="note">${esc(v.name)}: ${piecesText(v.built, v.half)}</p>`;
-  } else {
-    const v = add.after.current;
-    art = sculptureFor(v, { newPart: v.built, cls: "sx-reward" });
-    news = `<div class="news"><b>Half a stone</b> for the ${esc(v.sculpture.parts[v.built])}. Get it first try for a whole one.</div>
-      <p class="note">${esc(v.name)}: ${piecesText(v.built, true)}</p>`;
-  }
+  const words = rewardText(add, { firstTry: res.firstTry });
   const nb = nextButtons();
+  if (add.finished) {
+    // The reveal: under a cloth first, then the finished sculpture and its name.
+    const f = add.finished;
+    sheet(
+      `<div class="verdict good">That's right!</div>
+       <div class="riddle">${draft}${esc(q.explain)}</div>
+       <div class="sx-art" id="reveal-art">${coveredSVG({ cls: "sx-reward shiver", mark: "" })}</div>
+       <div id="reveal-words"><p class="note">${ASKER.finishing}</p></div>
+       <div class="stack">${nb.html}</div>`,
+      nb.acts,
+    );
+    later(1300).then(() => {
+      const art = $("reveal-art");
+      if (!art) return;
+      art.innerHTML = sculptureSVG(f.sculpture.id, { gold: f.gold, built: PIECES, label: f.name, cls: "sx-reward unveil" });
+      $("reveal-words").innerHTML = `<h2 class="reveal-name">${esc(words.title)}</h2>
+        <div class="news gold">${esc(words.line)}</div>
+        <p class="note">${esc(words.note)}</p>`;
+      sfx.win();
+      celebrate();
+      burst(art.getBoundingClientRect(), "#ffd23f");
+    });
+    return;
+  }
+  const v = add.after.current;
+  const newPart = add.placed ? add.placed.partIndex : v.built;
+  const art = sculptureFor(v, { newPart, cls: "sx-reward", fit: true });
+  const news = `<div class="news"><b>${esc(words.title)}</b> ${esc(words.line)}</div>
+    <p class="note">${esc(words.note)}</p>`;
   sheet(
     `<div class="verdict good">That's right!</div>
      <div class="riddle">${draft}${esc(q.explain)}</div>
@@ -689,14 +723,7 @@ function onAnswer(choice) {
      <div class="stack">${nb.html}</div>`,
     nb.acts,
   );
-  later(900).then(() => {
-    if (add.finished) {
-      sfx.win();
-      celebrate();
-    } else {
-      sfx.bloom();
-    }
-  });
+  later(900).then(() => sfx.bloom());
 }
 
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -812,29 +839,69 @@ function showCollection() {
   }
   html += `</div></div><div class="set-block"><h3>Garden visitors <small>from the daily chest</small></h3><div class="visitor-grid">`;
   for (const v of VISITORS) html += `<span class="${st.garden.visitors.includes(v.id) ? "" : "unknown"}">${v.emoji}</span>`;
-  html += `</div></div><div class="set-block"><h3>Garden sculptures <small>built by the sphinx</small></h3><div class="sculpture-grid">`;
+  html += `</div></div><div class="set-block"><h3>Garden sculptures <small>${ASKER.carvedBy}</small></h3><div class="sculpture-grid">`;
   for (const row of collectionRows(st.sculpture)) {
     const sc = row.sculpture;
     const lines = [];
     let pic;
-    if (row.building) {
-      const b = row.building;
-      pic = sculptureSVG(sc.id, { gold: b.gold, built: b.built, half: b.half, label: b.name });
-      lines.push(`<b>${esc(sc.name)}</b>`);
-      if (row.finished) lines.push("finished");
-      lines.push(`${b.gold ? "Gold: " : ""}${piecesText(b.built, b.half)}`);
-    } else if (row.finished) {
-      pic = sculptureSVG(sc.id, { gold: row.goldFinished > 0, label: sc.name });
-      lines.push(`<b>${esc(sc.name)}</b>`, "finished");
+    if (row.shownName) {
+      // Finished at least once: drawn and named.
+      pic = sculptureSVG(sc.id, { gold: row.goldFinished > 0, label: row.shownName });
+      lines.push(`<b>${esc(row.shownName)}</b>`, "finished");
+      if (row.building) lines.push(`Gold: ${piecesText(row.building.built, row.building.half)}`);
+      if (row.goldFinished) lines.push(`Gold: ${row.goldFinished} finished`);
+    } else if (row.building) {
+      // Being carved: still under its cloth.
+      pic = coveredSVG({ label: `${SURPRISE_NAME}, ${piecesText(row.building.built, row.building.half)}` });
+      lines.push(`<b>${SURPRISE_NAME}</b>`, piecesText(row.building.built, row.building.half));
     } else {
-      pic = sculptureSVG(sc.id, { built: 0, label: sc.name });
-      lines.push(`<b>${esc(sc.name)}</b>`, "not started");
+      pic = coveredSVG({ cls: "unknown", label: "A sculpture not started yet" });
+      lines.push("<b>?</b>", "not started");
     }
-    if (row.goldFinished) lines.push(`Gold: ${row.goldFinished} finished`);
     html += `<figure>${pic}<figcaption>${lines.join("<br>")}</figcaption></figure>`;
   }
   html += `</div></div><div class="stack"><button class="btn primary big" data-act="close">Close</button></div>`;
   sheet(html, { close: () => closeSheet() });
+}
+
+// ---------------------------------------------------------------- the whole garden
+// Everything, nothing hidden: scrolls if it is taller than the screen. Tapping
+// a flower, visitor, sculpture or garden feature shows its name.
+
+function showWholeGarden() {
+  const sv = sculptureView(st.sculpture);
+  const g = gardenScene(st.garden, { sculpture: sv, sculptureName });
+  const flowers = st.garden.planted.length;
+  $("whole-count").textContent = `${flowers} flower${flowers === 1 ? "" : "s"} \u00B7 ${sv.finished.length} sculpture${sv.finished.length === 1 ? "" : "s"}`;
+  $("whole-scene").innerHTML = `<svg class="garden-svg" viewBox="0 0 360 ${g.height}" width="100%" role="img" aria-label="Your whole garden">${g.svg}</svg>`;
+  $("whole-name").classList.add("hidden");
+  $("screen-whole").classList.remove("hidden");
+  $("whole-scroll").scrollTop = 0;
+}
+
+function closeWholeGarden() {
+  $("screen-whole").classList.add("hidden");
+}
+
+let nameTimer = 0;
+function showName(e) {
+  const item = e.target.closest("[data-name]");
+  const tag = $("whole-name");
+  if (!item) {
+    tag.classList.add("hidden");
+    return;
+  }
+  const host = $("whole-scroll");
+  const box = host.getBoundingClientRect();
+  const r = item.getBoundingClientRect();
+  tag.textContent = item.dataset.name;
+  tag.classList.remove("hidden");
+  const x = Math.min(Math.max(r.left + r.width / 2 - box.left, 90), box.width - 90);
+  tag.style.left = `${x}px`;
+  tag.style.top = `${Math.max(4, r.top - box.top + host.scrollTop - 8)}px`;
+  sfx.tap(1);
+  clearTimeout(nameTimer);
+  nameTimer = setTimeout(() => tag.classList.add("hidden"), 2200);
 }
 
 // ---------------------------------------------------------------- effects
@@ -914,6 +981,24 @@ $("code-btn").addEventListener("click", () => {
   unlock();
   showCode();
 });
+$("whole-btn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  unlock();
+  showWholeGarden();
+});
+$("garden-scroll").addEventListener("click", () => {
+  unlock();
+  showWholeGarden();
+});
+$("whole-close").addEventListener("click", closeWholeGarden);
+$("whole-close-2").addEventListener("click", closeWholeGarden);
+$("whole-scene").addEventListener("click", (e) => {
+  unlock();
+  showName(e);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("screen-whole").classList.contains("hidden")) closeWholeGarden();
+});
 $("collection-strip").addEventListener("click", () => {
   unlock();
   showCollection();
@@ -925,7 +1010,10 @@ $("back-btn").addEventListener("click", () => {
 $("undo-btn").addEventListener("click", onUndo);
 $("mute-btn").addEventListener("click", toggleMute);
 $("mute-btn-2").addEventListener("click", toggleMute);
-window.addEventListener("resize", () => layout());
+window.addEventListener("resize", () => {
+  layout();
+  fitHome();
+});
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && !$("screen-garden").classList.contains("hidden") && $("overlay").classList.contains("hidden")) renderGarden();
 });

@@ -18,9 +18,10 @@
         <button id="mute-btn" class="icon-btn" aria-label="Sound is on. Tap to turn it off.">🔊</button>
       </header>
       <button id="collection-strip" class="collection-strip" aria-label="Your flower collection"></button>
-      <button id="sphinx-btn" class="sphinx-strip" aria-label="The garden sphinx"></button>
+      <button id="sphinx-btn" class="sphinx-strip" aria-label="Old Moss the garden gnome"></button>
       <div id="garden-scroll" class="garden-scroll">
         <div id="garden-scene"></div>
+        <button id="whole-btn" class="whole-btn">🌼 See my whole garden</button>
       </div>
       <div class="actions">
         <button id="play-btn" class="btn primary big">Start playing</button>
@@ -48,6 +49,19 @@
       <div class="play-actions">
         <div id="tiles-left" class="tiles-left"></div>
         <button id="undo-btn" class="btn undo-btn">↶ Undo</button>
+      </div>
+    </section>
+
+    <section id="screen-whole" class="screen whole hidden" aria-label="Your whole garden">
+      <header class="topbar">
+        <div class="whole-title"><b>My whole garden</b><span id="whole-count"></span></div>
+        <button id="whole-close" class="icon-btn wide" aria-label="Close the whole garden">✕ Close</button>
+      </header>
+      <p class="whole-hint">Tap anything to see its name.</p>
+      <div id="whole-scroll" class="whole-scroll">
+        <div id="whole-scene"></div>
+        <div id="whole-name" class="whole-name hidden" aria-live="polite"></div>
+        <button id="whole-close-2" class="btn primary big whole-close-2">Back to my garden</button>
       </div>
     </section>
 

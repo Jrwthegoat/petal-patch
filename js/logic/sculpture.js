@@ -1,4 +1,4 @@
-// Garden sculptures: the sphinx's own reward. Each right answer adds to the
+// Garden sculptures: the question-asker's own reward. Each right answer adds to the
 // sculpture being built, from the base up: right at the first try is a whole
 // piece, right on a later try is half a piece (two halves make a piece).
 // A finished sculpture stays in the garden for good and the next one starts.
@@ -16,7 +16,7 @@ export const SCULPTURES = [
   { id: "owl", name: "Stone Owl", parts: ["base", "pedestal", "body", "wings", "head", "bright eyes"] },
   { id: "fountain", name: "Fountain", parts: ["basin", "pedestal", "lower bowl", "top bowl", "finial", "water"] },
   { id: "arch", name: "Garden Arch", parts: ["footings", "pillars", "left half", "right half", "keystone", "climbing roses"] },
-  { id: "sphinx", name: "Little Sphinx", parts: ["base", "plinth", "body", "head", "paws and tail", "flower crown"] },
+  { id: "rabbit", name: "Stone Rabbit", parts: ["base", "plinth", "body", "head", "ears", "flower crown"] },
 ];
 
 // "4 of 6", "4½ of 6", "½ of 6".
@@ -64,7 +64,9 @@ export function addHalves(state, halves) {
   return { sculpture: next, before, after, placed, finished, half: after.current.half };
 }
 
-// For the collection: each sculpture with how far it has got.
+// For the collection: each sculpture with how far it has got. shownName is
+// null while it is still a surprise (never finished), so the screen cannot
+// give it away.
 export function collectionRows(state) {
   const v = sculptureView(state);
   const n = SCULPTURES.length;
@@ -72,6 +74,46 @@ export function collectionRows(state) {
     const done = v.finished.filter((f) => f.index % n === i).length;
     const building = v.current.index % n === i ? v.current : null;
     // finished counts every time it was completed; the first is stone, later ones gold.
-    return { sculpture: sc, finished: done, goldFinished: Math.max(0, done - 1), building };
+    return { sculpture: sc, finished: done, goldFinished: Math.max(0, done - 1), building, shownName: done > 0 ? sc.name : null };
   });
+}
+
+// ---- What the player is told -------------------------------------------
+// A sculpture is a surprise until its last piece lands: nothing the player
+// reads names it (or its parts) before then. The gold round repeats ones
+// already finished, so those may be named.
+
+export const SURPRISE_NAME = "New sculpture";
+
+export function isRevealed(item) {
+  return !!(item && item.gold);
+}
+
+export function displayName(item) {
+  return isRevealed(item) ? item.name : SURPRISE_NAME;
+}
+
+// "New sculpture: 2 of 6", "Gold Sundial: 3½ of 6".
+export function progressLabel(current) {
+  return `${displayName(current)}: ${piecesText(current.built, current.half)}`;
+}
+
+const article = (name) => (/^[AEIOU]/i.test(name) ? "an" : "a");
+
+// The words after a right answer, from addHalves()'s result.
+// { title, line, note, reveal } — reveal is set only when a sculpture is finished.
+export function rewardText(add, { firstTry }) {
+  const cur = add.after.current;
+  const progress = piecesText(cur.built, cur.half);
+  if (add.finished) {
+    const f = add.finished;
+    const next = cur.gold && !f.gold ? "Next, the whole set again, in gold." : `Next: ${isRevealed(cur) ? cur.name : "a new sculpture"}.`;
+    return { title: `It's ${article(f.name)} ${f.name}!`, line: "It stays in your garden for good.", note: next, reveal: f.name };
+  }
+  if (add.placed) {
+    const piece = `Piece ${add.placed.partIndex + 1} of ${PIECES} is in place.`;
+    if (firstTry) return { title: "A whole piece!", line: piece, note: `${displayName(cur)}: ${progress}`, reveal: null };
+    return { title: "Two halves make a whole!", line: piece, note: "Get it first try for a whole one.", reveal: null };
+  }
+  return { title: "Half a stone.", line: "Get it first try for a whole one.", note: `${displayName(cur)}: ${progress}`, reveal: null };
 }

@@ -155,7 +155,7 @@ button {
 .locked-flower { opacity: 0.55; filter: saturate(0.7); }
 .lock { font-family: var(--emoji); font-size: 18px; }
 
-/* ---- sphinx corner ---- */
+/* ---- the question-asker's corner (Old Moss in the garden skin) ---- */
 .sphinx-strip {
   margin: 0 12px 8px;
   padding: 4px 12px 4px 4px;
@@ -168,7 +168,7 @@ button {
   background: #f3eff8;
   text-align: left;
 }
-.sphinx-strip .sphinx { width: 92px; height: 69px; flex: none; }
+.sphinx-strip .gnome { width: 68px; height: 72px; flex: none; }
 .sphinx-strip .sx-text { flex: 1; display: flex; flex-direction: column; line-height: 1.2; font-size: 17px; color: var(--ink-soft); }
 .sphinx-strip .sx-text b { font-size: 19px; color: #4a3a6a; }
 .sphinx-strip .sx-text small { font-size: 15px; font-weight: 700; color: var(--leaf-dark); margin-top: 2px; }
@@ -179,23 +179,27 @@ button {
   animation: awakeglow 2.2s ease-in-out infinite;
 }
 .sphinx-strip.awake .sx-text b { color: #8a4a00; font-size: 21px; }
-.sphinx-strip.awake .sphinx { animation: bob 1.8s ease-in-out infinite; }
+.sphinx-strip.awake .gnome { animation: bob 1.8s ease-in-out infinite; }
 .sphinx-strip:active { transform: translateY(2px); }
 @keyframes awakeglow { 0%, 100% { box-shadow: 0 3px 0 #d8a92e, 0 0 0 0 rgba(245, 184, 46, 0); } 50% { box-shadow: 0 3px 0 #d8a92e, 0 0 0 6px rgba(245, 184, 46, 0.45); } }
 @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-.sphinx.asleep { filter: saturate(0.75); }
+.gnome.asleep { filter: saturate(0.8); }
 .zzz text { animation: zfloat 3s ease-in-out infinite; }
 .zzz text:nth-child(2) { animation-delay: 0.5s; }
 .zzz text:nth-child(3) { animation-delay: 1s; }
 @keyframes zfloat { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
 
 /* ---- sculptures ---- */
-.sc-ghost { opacity: 0.7; }
-.sc-ghost * { fill: rgba(255, 255, 255, 0.35); stroke: #6b6355; stroke-dasharray: 3 3; stroke-width: 1.4; }
 .sc-new { transform-box: fill-box; transform-origin: 50% 100%; animation: drop 0.9s cubic-bezier(0.2, 1.4, 0.4, 1) 0.35s both; }
 @keyframes drop { 0% { transform: translateY(-40px); opacity: 0; } 60% { opacity: 1; } 100% { transform: none; opacity: 1; } }
 .sheet .sx-pair { display: flex; justify-content: center; align-items: flex-end; gap: 4px; }
-.sheet .sx-pair .sphinx { width: 170px; height: 128px; }
+.sheet .sx-pair .gnome { width: 124px; height: 130px; }
+.sheet > .gnome { width: 110px; height: 115px; }
+.sheet .sx-art .covered.shiver { animation: shiver 0.5s ease-in-out 0.3s 2; transform-origin: 50% 100%; }
+@keyframes shiver { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
+.sheet .sx-art .unveil { animation: unveil 0.8s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+@keyframes unveil { 0% { transform: scale(0.6); opacity: 0; } 100% { transform: none; opacity: 1; } }
+.sheet .reveal-name { font-size: 34px; margin: 6px 0 4px; }
 .sheet .sx-goal { width: 90px; height: 108px; }
 .sheet .sx-art .sculpture { width: 150px; height: 180px; }
 .sheet .sx-visit { animation: nudge 2.4s ease-in-out infinite; }
@@ -204,18 +208,63 @@ button {
 .sculpture-grid figure { margin: 0; text-align: center; font-size: 16px; line-height: 1.25; font-weight: 600; color: var(--ink-soft); }
 .sculpture-grid figure b { color: var(--ink); font-size: 17px; }
 .sculpture-grid svg { width: 100%; height: auto; max-height: 120px; }
+.sculpture-grid .covered.unknown { opacity: 0.35; }
 
 /* ---- garden ---- */
 .garden-scroll {
   flex: 1;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  min-height: 120px;
+  position: relative;
+  overflow: hidden;
   margin: 0 8px;
   border-radius: 22px;
-  box-shadow: inset 0 0 0 3px #b9d89f;
-  background: var(--grass);
+  background: #d6edf8;
+  cursor: pointer;
 }
+.garden-scroll::after { content: ""; position: absolute; inset: 0; border-radius: 22px; box-shadow: inset 0 0 0 3px #b9d89f; pointer-events: none; }
+#garden-scene { position: absolute; inset: 0 0 52px 0; }
+#garden-scene .garden-svg { width: 100%; height: 100%; }
 .garden-svg { display: block; }
+.whole-btn {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 52px;
+  border: none;
+  border-top: 2px solid #b9d89f;
+  background: var(--paper);
+  color: var(--leaf-dark);
+  font-size: 19px;
+  font-weight: 800;
+  font-family: var(--emoji), system-ui;
+}
+.whole-btn:active { background: #f1f8e9; }
+.whole-btn.news { animation: nudge 2.4s ease-in-out infinite; background: #fff1c2; border-color: #d8a92e; }
+
+/* ---- the whole garden ---- */
+.screen.whole { position: absolute; inset: 0; z-index: 40; background: var(--cream); }
+.whole-title { flex: 1; display: flex; flex-direction: column; line-height: 1.2; }
+.whole-title b { font-size: 24px; color: var(--leaf-dark); font-family: Georgia, "Times New Roman", serif; }
+.whole-title span { font-size: 16px; color: var(--ink-soft); font-weight: 600; }
+.whole-hint { margin: 0 14px 6px; font-size: 16px; color: var(--ink-soft); }
+.whole-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; position: relative; padding: 0 8px 16px; }
+#whole-scene { border-radius: 22px; overflow: hidden; box-shadow: inset 0 0 0 3px #b9d89f; background: #d6edf8; }
+#whole-scene .item { cursor: pointer; }
+.whole-name {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  background: var(--ink);
+  color: #fff;
+  font-weight: 800;
+  font-size: 19px;
+  padding: 6px 14px;
+  border-radius: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+.whole-close-2 { margin-top: 12px; }
 .bloom { transform-box: fill-box; transform-origin: 50% 100%; animation: bloom 1s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
 @keyframes bloom { 0% { transform: scale(0) rotate(-20deg); opacity: 0; } 60% { opacity: 1; } 100% { transform: scale(1) rotate(0); opacity: 1; } }
 .visitor.arrive { transform-box: fill-box; transform-origin: 50% 100%; animation: hop 1.2s ease-out 0.4s both; }
@@ -346,7 +395,7 @@ button {
 .sheet .flower-row { display: flex; justify-content: center; gap: 6px; }
 .sheet .flower-row svg { width: 110px; height: 132px; }
 
-.sphinx { width: 200px; height: 150px; }
+.gnome { width: 124px; height: 130px; }
 .riddle {
   font-size: 24px;
   font-weight: 700;
@@ -428,7 +477,11 @@ button {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
 }
 
-@media (max-height: 640px) {
+@media (max-height: 700px) {
   .topbar { min-height: 56px; padding: 4px 10px; }
-  .collection-strip { min-height: 56px; }
+  .collection-strip { min-height: 56px; margin-bottom: 6px; }
+  .sphinx-strip { min-height: 64px; margin-bottom: 6px; }
+  .sphinx-strip .gnome { width: 56px; height: 60px; }
+  .actions { padding: 8px 12px 10px; gap: 8px; }
+  .btn.big { min-height: 60px; }
 }

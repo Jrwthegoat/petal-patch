@@ -1,5 +1,5 @@
-// Drawings as SVG strings: flowers, the garden scene, the sphinx and the
-// garden sculptures.
+// Drawings as SVG strings: flowers, the garden scene, the garden gnome who
+// asks the questions, and the garden sculptures he carves.
 // No images to load, so everything looks the same on every phone.
 
 import { FLOWERS, SPECIALS, VISITORS, completedSets, flowerById } from "./logic/garden.js";
@@ -78,197 +78,374 @@ export function flowerSVG(f, { cls = "", label = f.name } = {}) {
 }
 
 // ---- The garden scene -------------------------------------------------------
+// Laid out in zones, top to bottom, so nothing sits on anything else:
+//   sky (sun OR moon, one cloud)
+//   back row: apple tree on the left, fence on the right
+//   middle lawn: path in the middle, pond on the right, visitors on the grass
+//   sculpture lawn: one strip per row of three sculptures
+//   flower bed: one soil strip per row of five flowers
+// The full view shows all of it. The home screen shows a short vignette made
+// of the same pieces: the landscape, the sculpture being carved and the
+// newest flowers (homeScene below). The sky keeps its top 48 units empty so
+// the vignette may trim it on a short screen without cutting anything.
 
-const VISITOR_SPOTS = {
-  bird: [150, 130], rabbit: [96, 196], frog: [246, 178], ladybug: [326, 206], turtle: [196, 196],
-  duck: [292, 160], hedgehog: [30, 204], owl: [62, 92], chipmunk: [140, 192], dove: [226, 66],
-};
+const HORIZON = 112;
+const BACK_BOTTOM = 172;
+const MID_BOTTOM = 266;
+
+function named(name, body, extra = "") {
+  return `<g class="item" data-name="${name}" ${extra}>${body}</g>`;
+}
 
 function fence() {
-  let s = `<rect x="0" y="134" width="360" height="5" fill="#f4f1ea" stroke="#b9b09d"/><rect x="0" y="152" width="360" height="5" fill="#f4f1ea" stroke="#b9b09d"/>`;
-  for (let x = 4; x < 360; x += 18) {
-    s += `<path d="M${x},164 L${x},128 L${x + 5},121 L${x + 10},128 L${x + 10},164 Z" fill="#fbfaf6" stroke="#b9b09d" stroke-width="1.2"/>`;
+  // Right of the tree, along the back.
+  const x0 = 116;
+  const x1 = 352;
+  let s = `<rect x="${x0}" y="138" width="${x1 - x0}" height="4" fill="#f4f1ea" stroke="#c9c1ae"/><rect x="${x0}" y="154" width="${x1 - x0}" height="4" fill="#f4f1ea" stroke="#c9c1ae"/>`;
+  for (let x = x0 + 2; x < x1 - 6; x += 20) {
+    s += `<path d="M${x},166 L${x},132 L${x + 4.5},126 L${x + 9},132 L${x + 9},166 Z" fill="#fbfaf6" stroke="#c9c1ae" stroke-width="1.1"/>`;
   }
-  return s;
+  return named("Picket fence", s);
 }
 
 function tree() {
-  return `<rect x="52" y="96" width="18" height="96" rx="6" fill="#8a5a33" stroke="#5e3a1d" stroke-width="2"/>` +
-    `<circle cx="61" cy="78" r="44" fill="#4f9a3f" stroke="#2f6e2a" stroke-width="2"/>` +
-    `<circle cx="30" cy="92" r="26" fill="#5aab48" stroke="#2f6e2a" stroke-width="2"/>` +
-    `<circle cx="94" cy="90" r="26" fill="#5aab48" stroke="#2f6e2a" stroke-width="2"/>` +
-    [[40, 66], [76, 58], [88, 92], [32, 98], [60, 100], [52, 50], [74, 82]]
-      .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="6" fill="#e0312f" stroke="#8a1a19" stroke-width="1.2"/>`).join("");
+  return named("Apple tree",
+    `<rect x="47" y="110" width="14" height="58" rx="5" fill="#8a5a33" stroke="#5e3a1d" stroke-width="1.6"/>` +
+    `<circle cx="54" cy="90" r="30" fill="#5c9e4a" stroke="#3d7a33" stroke-width="1.6"/>` +
+    `<circle cx="30" cy="103" r="17" fill="#66a852" stroke="#3d7a33" stroke-width="1.6"/>` +
+    `<circle cx="79" cy="103" r="17" fill="#66a852" stroke="#3d7a33" stroke-width="1.6"/>` +
+    [[38, 80], [72, 76], [84, 106], [26, 108]]
+      .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="4.2" fill="#d9534a" stroke="#963027" stroke-width="1"/>`).join(""));
 }
 
 function pond() {
-  return `<ellipse cx="278" cy="176" rx="70" ry="24" fill="#6fbde3" stroke="#3a87b0" stroke-width="2.5"/>` +
-    `<ellipse cx="268" cy="172" rx="44" ry="10" fill="#9bd4ef"/>` +
-    `<path d="M240,178 a10,6 0 1,0 18,0 l-9,0 z" fill="#4f9a3f"/><path d="M300,170 a11,7 0 1,0 20,0 l-10,0 z" fill="#4f9a3f"/>` +
-    `<circle cx="310" cy="168" r="4" fill="#ffc2d6"/>`;
+  return named("Lily pond",
+    `<ellipse cx="282" cy="222" rx="62" ry="22" fill="#8ccbe8" stroke="#5a9cc0" stroke-width="2"/>` +
+    `<ellipse cx="274" cy="217" rx="38" ry="8" fill="#b4def2"/>` +
+    `<path d="M318,226 a9,5 0 1,0 16,0 l-8,0 z" fill="#5c9e4a"/>` +
+    `<circle cx="326" cy="224" r="3" fill="#ffd6e4"/>`);
 }
 
-function path() {
-  return [[176, 168], [190, 184], [172, 200], [186, 214]]
-    .map(([x, y], i) => `<ellipse cx="${x}" cy="${y}" rx="${16 - i}" ry="7" fill="#d9d2c3" stroke="#a39a86" stroke-width="1.5"/>`).join("");
+function stonePath() {
+  return named("Stone path", [[182, 184], [170, 205], [184, 226], [172, 248]]
+    .map(([x, y], i) => `<ellipse cx="${x}" cy="${y}" rx="${15 - i * 0.5}" ry="6.5" fill="#ddd7ca" stroke="#aaa18e" stroke-width="1.3"/>`).join(""));
 }
 
-function sun(bright) {
-  if (!bright) return `<circle cx="300" cy="46" r="20" fill="#fff1b8"/>`;
-  let rays = "";
-  for (let i = 0; i < 12; i++) {
-    rays += `<line x1="300" y1="46" x2="${300 + Math.cos((i * Math.PI) / 6) * 44}" y2="${46 + Math.sin((i * Math.PI) / 6) * 44}" stroke="#ffd23f" stroke-width="4" stroke-linecap="round"/>`;
+function sky(dusk, bright) {
+  let s = `<rect x="0" y="-2000" width="360" height="${2000 + HORIZON + 10}" fill="${dusk ? "#d4cdee" : "#d6edf8"}"/>`;
+  // The top-left corner stays clear for the home screen's button.
+  if (dusk) {
+    s += named("The moon", `<path d="M318,54 a19,19 0 1,0 20,28 a15,15 0 1,1 -20,-28 z" fill="#fff6c9" stroke="#e0c96a" stroke-width="1.4"/>`);
+  } else if (bright) {
+    let rays = "";
+    for (let i = 0; i < 8; i++) {
+      const a = (i * Math.PI) / 4;
+      rays += `<line x1="${(316 + Math.cos(a) * 21).toFixed(1)}" y1="${(76 + Math.sin(a) * 21).toFixed(1)}" x2="${(316 + Math.cos(a) * 27).toFixed(1)}" y2="${(76 + Math.sin(a) * 27).toFixed(1)}" stroke="#f7cf5a" stroke-width="3" stroke-linecap="round"/>`;
+    }
+    s += named("The sun", rays + `<circle cx="316" cy="76" r="16" fill="#ffdc6b" stroke="#ecb73a" stroke-width="1.5"/>`);
+  } else {
+    s += named("The sun", `<circle cx="316" cy="76" r="15" fill="#fff1b8"/>`);
   }
-  return rays + `<circle cx="300" cy="46" r="26" fill="#ffd23f" stroke="#e8a800" stroke-width="2"/>` +
-    `<path d="M200,40 q8,-8 16,0 q8,-8 16,0" fill="none" stroke="#2c5aa0" stroke-width="3" stroke-linecap="round"/>` +
-    `<path d="M236,62 q6,-6 12,0 q6,-6 12,0" fill="none" stroke="#2c5aa0" stroke-width="3" stroke-linecap="round"/>`;
+  s += cloud(206, 84, 0.7);
+  return s;
+}
+
+function bluebirds() {
+  return named("Bluebirds",
+    `<path d="M240,62 q6,-6 12,0 q6,-6 12,0" fill="none" stroke="#4a73b8" stroke-width="2.4" stroke-linecap="round"/>` +
+    `<path d="M252,78 q5,-5 10,0 q5,-5 10,0" fill="none" stroke="#4a73b8" stroke-width="2.4" stroke-linecap="round"/>`);
 }
 
 function cloud(x, y, s) {
   return `<g transform="translate(${x} ${y}) scale(${s})"><ellipse cx="0" cy="0" rx="26" ry="12" fill="#fff"/><ellipse cx="-14" cy="-6" rx="14" ry="11" fill="#fff"/><ellipse cx="10" cy="-10" rx="16" ry="13" fill="#fff"/></g>`;
 }
 
-function fireflies(height) {
-  const rng = mulberry32(7);
-  let s = `<path d="M118,22 a18,18 0 1,0 18,26 a14,14 0 1,1 -18,-26 z" fill="#fff6c9" stroke="#e0c96a" stroke-width="1.5"/>`;
-  for (let i = 0; i < 18; i++) {
-    const x = 10 + rng() * 340;
-    const y = 120 + rng() * (height - 140);
-    s += `<circle class="firefly" style="animation-delay:${(rng() * 3).toFixed(2)}s" cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" r="3.2" fill="#fff36b"/>`;
-  }
-  return s;
+// Fireflies drift in the gaps of the sky and back row, never over the flowers.
+function fireflies() {
+  const spots = [[150, 96], [204, 84], [128, 118], [232, 110], [104, 186], [214, 190], [118, 206], [348, 196]];
+  return named("Fireflies", spots.map(([x, y], i) => `<circle class="firefly" style="animation-delay:${(i * 0.37).toFixed(2)}s" cx="${x}" cy="${y}" r="2.6" fill="#fff36b"/>`).join(""));
 }
 
-export const BED_TOP = 226;
-const PER_ROW = 5;
-const ROW_H = 52;
-const FW = 62;
-const FH = 74;
+// Each visitor has its own spot near something that suits it. [x, baseline]
+// with the feature it belongs to, and a spot on plain grass if that feature
+// is not in the garden yet.
+const VISITOR_SPOTS = {
+  owl: { near: "orchard", at: [56, 100], else: [34, 160] },
+  chipmunk: { near: "orchard", at: [86, 168], else: [86, 168] },
+  bird: { near: "meadow", at: [330, 128], else: [334, 164] },
+  dove: { near: "meadow", at: [226, 128], else: [232, 164] },
+  duck: { near: "pond", at: [292, 226], else: [300, 226] },
+  frog: { near: "pond", at: [326, 230], else: [326, 230] },
+  turtle: { near: "pond", at: [228, 254], else: [228, 254] },
+  rabbit: { near: null, at: [72, 214] },
+  hedgehog: { near: null, at: [30, 252] },
+  ladybug: { near: "cottage", at: [136, 252], else: [136, 252] },
+};
 
-export function flowerSpot(i, top = BED_TOP) {
+export function visitorSpot(id, sets) {
+  const v = VISITOR_SPOTS[id];
+  if (!v) return [120, 210];
+  return v.near && !sets.has(v.near) ? v.else : v.at;
+}
+
+// Sculpture lawn: three to a row, one strip per row.
+const SC_PER_ROW = 3;
+const SC_SLOT = 112;
+const SC_W = 84;
+const SC_H = 101;
+const SC_ROW = 132;
+
+// Flower bed: five to a row, one soil strip per row.
+const PER_ROW = 5;
+const FW = 58;
+const FH = 70;
+const BED_ROW = 76;
+const BED_H = 66;
+
+export function flowerSpot(i, top) {
   const row = Math.floor(i / PER_ROW);
   const col = i % PER_ROW;
   const rng = mulberry32(hashString(`spot-${i}`));
-  const x = 14 + col * 64 + (row % 2 ? 18 : 0) + (rng() * 8 - 4) - (row % 2 && col === PER_ROW - 1 ? 22 : 0);
-  const y = top + row * ROW_H + (rng() * 6 - 3);
+  const x = 22 + col * 64 + (rng() * 4 - 2);
+  const y = top + row * BED_ROW - 4;
   return { x, y, w: FW, h: FH };
 }
 
-// The sculpture lawn sits between the hills and the flower beds: finished
-// sculptures in order, then the one being built, four to a row.
-const LAWN_TOP = BED_TOP + 6;
-const SC_PER_ROW = 4;
-const SC_SLOT = 84;
-const SC_W = 74;
-const SC_H = 89;
-const SC_ROW = 106;
-
-function lawn(view, newPiece) {
+function lawn(view, newPiece, top, sculptureName) {
   const items = view.finished.map((f) => ({ ...f, built: PIECES, half: false, done: true }));
   items.push({ ...view.current, done: false });
   const rows = Math.ceil(items.length / SC_PER_ROW);
-  const h = rows * SC_ROW + 12;
-  let s = `<rect x="8" y="${LAWN_TOP}" width="344" height="${h}" rx="22" fill="#a6d888" stroke="#7fb862" stroke-width="2"/>`;
+  let s = "";
+  const stops = [];
+  for (let r = 0; r < rows; r++) {
+    const y = top + r * SC_ROW;
+    s += `<rect x="10" y="${y}" width="340" height="${SC_ROW - 10}" rx="20" fill="#b3dc98" stroke="#97c77b" stroke-width="1.5"/>`;
+    stops.push(y + SC_ROW - 4);
+  }
   items.forEach((it, i) => {
     const row = Math.floor(i / SC_PER_ROW);
     const inRow = Math.min(SC_PER_ROW, items.length - row * SC_PER_ROW);
     const col = i % SC_PER_ROW;
     const x = 180 - (inRow * SC_SLOT) / 2 + col * SC_SLOT + (SC_SLOT - SC_W) / 2;
-    const y = LAWN_TOP + 6 + row * SC_ROW;
+    const y = top + row * SC_ROW + 2;
     const opts = { gold: it.gold, built: it.built, half: it.half, newPart: !it.done && newPiece ? it.built - 1 : -1 };
-    s += `<svg x="${x}" y="${y}" width="${SC_W}" height="${SC_H}" viewBox="0 0 100 120" class="${it.done ? "" : "building"}">${sculptureInner(it.sculpture.id, opts)}</svg>`;
+    const name = sculptureName(it);
+    s += `<g class="item" data-name="${name}"><svg x="${x}" y="${y}" width="${SC_W}" height="${SC_H}" viewBox="0 0 100 120" class="${it.done ? "" : "building"}">${sculptureInner(it.sculpture.id, opts)}</svg>`;
     if (!it.done) {
       const label = piecesText(it.built, it.half);
-      s += `<rect x="${x + SC_W / 2 - 26}" y="${y + SC_H - 1}" width="52" height="18" rx="9" fill="#fff8ec" stroke="#b9a98a"/>`;
-      s += `<text x="${x + SC_W / 2}" y="${y + SC_H + 12.5}" text-anchor="middle" font-size="13" font-weight="800" fill="#24502a">${label}</text>`;
+      s += `<rect x="${x + SC_W / 2 - 28}" y="${y + SC_H + 1}" width="56" height="20" rx="10" fill="#fff8ec" stroke="#b9a98a"/>`;
+      s += `<text x="${x + SC_W / 2}" y="${y + SC_H + 16}" text-anchor="middle" font-size="14" font-weight="800" fill="#24502a">${label}</text>`;
     }
+    s += `</g>`;
   });
-  return { svg: s, height: h + 10 };
+  return { svg: s, height: rows * SC_ROW, stops };
 }
 
-// highlightFrom: planted flowers from this index on bloom in with an animation.
-// sculpture: sculptureView(); newPiece: the newest piece drops in.
-export function gardenSVG(garden, { highlightFrom = Infinity, newVisitors = [], sculpture = null, newPiece = false } = {}) {
+// Sky, back row and middle lawn with the visitors: everything above the
+// sculpture lawn. groundTo: how far down the grass goes. back: false leaves
+// out the sky and back row (for a short home screen): plain sky comes down to
+// hills just above the middle lawn.
+export const MIDDLE_TOP = 176;
+function landscape(garden, { newVisitors = [], groundTo = MID_BOTTOM, back = true } = {}) {
   const sets = new Set(completedSets(garden));
-  const planted = garden.planted || [];
-  const rows = Math.max(1, Math.ceil(planted.length / PER_ROW));
-  const lawnPart = sculpture ? lawn(sculpture, newPiece) : { svg: "", height: 0 };
-  const bedTop = BED_TOP + lawnPart.height;
-  const height = bedTop + rows * ROW_H + FH - 6;
   const dusk = sets.has("twilight");
-  const ids = new Set(planted.map((p) => p.k));
-  const defs = [...ids].map((id) => {
-    const f = flowerById(id);
-    return f ? `<symbol id="fl-${id}" viewBox="0 0 100 120">${flowerInner(f)}</symbol>` : "";
-  }).join("");
-
-  let s = `<svg class="garden-svg" viewBox="0 0 360 ${height}" width="100%" role="img" aria-label="Your garden with ${planted.length} flowers"><defs>${defs}</defs>`;
-  s += `<rect width="360" height="140" fill="${dusk ? "#c9c3ec" : "#cfe9f7"}"/>`;
-  if (dusk) s += `<rect width="360" height="60" fill="#a99fe0" opacity=".55"/>`;
-  s += sun(sets.has("sunshine"));
-  s += cloud(70, 36, 1) + cloud(200, 22, 0.8);
-  s += `<ellipse cx="80" cy="150" rx="160" ry="40" fill="#a8d88a"/><ellipse cx="300" cy="150" rx="140" ry="34" fill="#9ccf7f"/>`;
-  s += `<rect y="140" width="360" height="${height - 140}" fill="#8cc56b"/>`;
-  if (sets.has("orchard")) s += tree();
-  if (sets.has("meadow")) s += fence();
+  const horizon = back ? HORIZON : MIDDLE_TOP - 4;
+  let s;
+  if (back) {
+    s = sky(dusk, sets.has("sunshine"));
+    if (sets.has("sunshine")) s += bluebirds();
+  } else {
+    s = `<rect x="0" y="-2000" width="360" height="${2000 + horizon + 10}" fill="${dusk ? "#d4cdee" : "#d6edf8"}"/>`;
+  }
+  s += `<ellipse cx="90" cy="${horizon + 6}" rx="170" ry="${back ? 26 : 16}" fill="#b9dea0"/><ellipse cx="300" cy="${horizon + 8}" rx="150" ry="${back ? 22 : 14}" fill="#b1d996"/>`;
+  s += `<rect y="${horizon + 8}" width="360" height="${groundTo - horizon - 8}" fill="#a3d184"/>`;
+  if (back && sets.has("orchard")) s += tree();
+  if (back && sets.has("meadow")) s += fence();
   if (sets.has("pond")) s += pond();
-  if (sets.has("cottage")) s += path();
-  s += lawnPart.svg;
-  // Soil beds, two flower rows each.
-  for (let r = 0; r < rows; r += 2) {
-    const top = bedTop + r * ROW_H + 24;
-    const h = Math.min(2, rows - r) * ROW_H + 18;
-    s += `<rect x="8" y="${top}" width="344" height="${h}" rx="22" fill="#9a6b43" stroke="#6e4a2c" stroke-width="2"/>`;
-    s += `<rect x="16" y="${top + 6}" width="328" height="${h - 12}" rx="18" fill="#a8764b"/>`;
-  }
-  if (planted.length === 0) {
-    s += `<text x="180" y="${bedTop + 54}" text-anchor="middle" font-size="17" font-weight="700" fill="#fff8ec">Your first flower grows here</text>`;
-  }
-  planted.forEach((p, i) => {
-    const { x, y, w, h } = flowerSpot(i, bedTop);
-    const cls = i >= highlightFrom ? "bloom" : "";
-    const delay = i >= highlightFrom ? `style="animation-delay:${(i - highlightFrom) * 0.35 + 0.2}s"` : "";
-    s += `<g class="${cls}" ${delay} data-i="${i}"><use href="#fl-${p.k}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w}" height="${h}"/></g>`;
-  });
+  if (sets.has("cottage")) s += stonePath();
+  if (back && dusk) s += fireflies();
   (garden.visitors || []).forEach((id) => {
     const v = VISITORS.find((x) => x.id === id);
-    const [x, y] = VISITOR_SPOTS[id] || [180, 200];
+    if (!v) return;
+    const [x, y] = visitorSpot(id, sets);
+    if (!back && y - 28 < MIDDLE_TOP) return;
     const cls = newVisitors.includes(id) ? "visitor arrive" : "visitor";
-    s += `<text class="${cls}" x="${x}" y="${y}" font-size="30" text-anchor="middle">${v.emoji}</text>`;
+    const name = v.name.charAt(0).toUpperCase() + v.name.slice(1);
+    s += `<text class="item ${cls}" data-name="${name}" x="${x}" y="${y}" font-size="26" text-anchor="middle">${v.emoji}</text>`;
   });
-  if (dusk) s += fireflies(height);
-  s += `</svg>`;
   return s;
 }
 
-// ---- The sphinx --------------------------------------------------------------
+function flowerDefs(list) {
+  return [...new Set(list.map((p) => p.k))].map((id) => {
+    const f = flowerById(id);
+    return f ? `<symbol id="fl-${id}" viewBox="0 0 100 120">${flowerInner(f)}</symbol>` : "";
+  }).join("");
+}
 
-export function sphinxSVG({ asleep = false, cls = "" } = {}) {
+// Flower rows: entries are { k, i } (i = index in planted, for the bloom-in).
+function bed(entries, top, highlightFrom) {
+  const rows = Math.max(1, Math.ceil(entries.length / PER_ROW));
+  let s = "";
+  const stops = [];
+  for (let r = 0; r < rows; r++) {
+    const y = top + r * BED_ROW;
+    s += `<rect x="10" y="${y}" width="340" height="${BED_H}" rx="18" fill="#9a6b43" stroke="#6e4a2c" stroke-width="1.6"/>`;
+    s += `<rect x="16" y="${y + 5}" width="328" height="${BED_H - 10}" rx="14" fill="#a8764b"/>`;
+    stops.push(y + BED_H + 2);
+  }
+  if (entries.length === 0) {
+    s += `<text x="180" y="${top + 40}" text-anchor="middle" font-size="17" font-weight="700" fill="#fff8ec">Your first flower grows here</text>`;
+  }
+  entries.forEach((p, slot) => {
+    const f = flowerById(p.k);
+    const { x, y, w, h } = flowerSpot(slot, top);
+    const isNew = p.i >= highlightFrom;
+    const cls = isNew ? "bloom" : "";
+    const delay = isNew ? `style="animation-delay:${(p.i - highlightFrom) * 0.35 + 0.2}s"` : "";
+    s += `<g class="item ${cls}" ${delay} data-i="${p.i}" data-name="${f ? f.name : "Flower"}"><use href="#fl-${p.k}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w}" height="${h}"/></g>`;
+  });
+  return { svg: s, height: rows * BED_ROW, stops };
+}
+
+// The whole garden. Returns { svg, height, stops }.
+// highlightFrom: planted flowers from this index on bloom in with an animation.
+// sculpture: sculptureView(); newPiece: the newest piece drops in.
+// sculptureName(item): what to call a sculpture (finished ones by name, the
+// one being built stays a surprise).
+export function gardenScene(garden, { highlightFrom = Infinity, newVisitors = [], sculpture = null, newPiece = false, sculptureName = () => "Garden sculpture" } = {}) {
+  const planted = garden.planted || [];
+  const lawnTop = MID_BOTTOM + 4;
+  const lawnPart = sculpture ? lawn(sculpture, newPiece, lawnTop, sculptureName) : { svg: "", height: 0, stops: [] };
+  const bedTop = lawnTop + lawnPart.height + 4;
+  const bedPart = bed(planted.map((p, i) => ({ k: p.k, i })), bedTop, highlightFrom);
+  const height = bedTop + bedPart.height + 2;
+  const s = `<defs>${flowerDefs(planted)}</defs>` + landscape(garden, { newVisitors, groundTo: height }) + lawnPart.svg + bedPart.svg;
+  return { svg: s, height, stops: [MID_BOTTOM, ...lawnPart.stops, ...bedPart.stops.slice(0, -1), height], planted: planted.length };
+}
+
+// The home screen's vignette, built to fit a frame `units` tall (in the
+// scene's 360-wide units). One front strip holds the sculpture being carved
+// (on its own patch of lawn) beside the four newest flowers; above it the
+// landscape, its empty top sky trimmed if needed. On a shorter screen the
+// back row goes (only the middle lawn with its pond, path and ground
+// visitors); shorter still, the front strip stands alone under open sky.
+// Nothing is ever cut in half. Returns { svg, viewBox, withLand }: the bottom of the vignette
+// sits at the bottom of the frame and any room above is sky.
+export const SKY_TRIM = 48;
+const STRIP_H = SC_ROW - 8;
+
+function frontStrip(garden, top, { highlightFrom, sculpture, newPiece, sculptureName }) {
+  const planted = garden.planted || [];
+  const per = sculpture ? 4 : PER_ROW;
+  const newest = planted.map((p, i) => ({ k: p.k, i })).slice(-per);
+  let s = `<defs>${flowerDefs(newest)}</defs>`;
+  let bedX = 10;
+  if (sculpture) {
+    const it = { ...sculpture.current, done: false };
+    s += `<rect x="10" y="${top}" width="100" height="${STRIP_H}" rx="18" fill="#b3dc98" stroke="#97c77b" stroke-width="1.5"/>`;
+    const x = 18;
+    const y = top + 2;
+    const opts = { gold: it.gold, built: it.built, half: it.half, newPart: newPiece ? it.built - 1 : -1 };
+    s += `<g class="item" data-name="${sculptureName(it)}"><svg x="${x}" y="${y}" width="${SC_W}" height="${SC_H}" viewBox="0 0 100 120" class="building">${sculptureInner(it.sculpture.id, opts)}</svg>`;
+    s += `<rect x="${x + SC_W / 2 - 28}" y="${y + SC_H}" width="56" height="20" rx="10" fill="#fff8ec" stroke="#b9a98a"/>`;
+    s += `<text x="${x + SC_W / 2}" y="${y + SC_H + 15}" text-anchor="middle" font-size="14" font-weight="800" fill="#24502a">${piecesText(it.built, it.half)}</text></g>`;
+    bedX = 116;
+  }
+  const bedY = top + STRIP_H - BED_H;
+  const bedW = 350 - bedX;
+  s += `<rect x="${bedX}" y="${bedY}" width="${bedW}" height="${BED_H}" rx="18" fill="#9a6b43" stroke="#6e4a2c" stroke-width="1.6"/>`;
+  s += `<rect x="${bedX + 6}" y="${bedY + 5}" width="${bedW - 12}" height="${BED_H - 10}" rx="14" fill="#a8764b"/>`;
+  if (newest.length === 0) {
+    s += `<text x="${bedX + bedW / 2}" y="${bedY + 39}" text-anchor="middle" font-size="16" font-weight="700" fill="#fff8ec">Your first flower grows here</text>`;
+  }
+  const step = (bedW - 8) / per;
+  newest.forEach((p, slot) => {
+    const f = flowerById(p.k);
+    const x = bedX + 4 + slot * step + (step - FW) / 2;
+    const y = bedY - 4;
+    const isNew = p.i >= highlightFrom;
+    const cls = isNew ? "bloom" : "";
+    const delay = isNew ? `style="animation-delay:${(p.i - highlightFrom) * 0.35 + 0.2}s"` : "";
+    s += `<g class="item ${cls}" ${delay} data-i="${p.i}" data-name="${f ? f.name : "Flower"}"><use href="#fl-${p.k}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${FW}" height="${FH}"/></g>`;
+  });
+  return s;
+}
+
+export function homeScene(garden, { highlightFrom = Infinity, newVisitors = [], sculpture = null, newPiece = false, sculptureName = () => "Garden sculpture" } = {}, units = 600) {
+  const top = MID_BOTTOM + 4;
+  const height = top + STRIP_H + 4;
+  const withLand = units >= height - SKY_TRIM;
+  const withMiddle = !withLand && units >= height - MIDDLE_TOP + 10;
+  let s = "";
+  if (withLand || withMiddle) {
+    s += landscape(garden, { newVisitors, groundTo: height, back: withLand });
+  } else {
+    const dusk = new Set(completedSets(garden)).has("twilight");
+    s += `<rect x="0" y="-2000" width="360" height="${2000 + top}" fill="${dusk ? "#d4cdee" : "#d6edf8"}"/>`;
+    s += `<ellipse cx="90" cy="${top - 6}" rx="170" ry="22" fill="#b9dea0"/><ellipse cx="300" cy="${top - 4}" rx="150" ry="18" fill="#b1d996"/>`;
+    s += `<rect y="${top - 4}" width="360" height="${height - top + 4}" fill="#a3d184"/>`;
+  }
+  s += frontStrip(garden, top, { highlightFrom, sculpture, newPiece, sculptureName });
+  return { svg: s, viewBox: `0 ${(height - units).toFixed(1)} 360 ${units.toFixed(1)}`, height, withLand, withMiddle };
+}
+
+export function gardenSVG(garden, opts = {}) {
+  const g = gardenScene(garden, opts);
+  return `<svg class="garden-svg" viewBox="0 0 360 ${g.height}" width="100%" role="img" aria-label="Your garden with ${g.planted} flowers">${g.svg}</svg>`;
+}
+
+// ---- Old Moss, the garden gnome (the garden skin's question-asker) ------------
+
+export function gnomeSVG({ asleep = false, cls = "", label = "The garden gnome" } = {}) {
+  const skin = "#f6c9a4";
+  const skinEdge = "#b07a50";
   const eyes = asleep
-    ? `<path d="M46,51 Q51,55 56,51 M64,51 Q69,55 74,51" fill="none" stroke="#3a2a1a" stroke-width="2.8" stroke-linecap="round"/>`
-    : `<circle cx="51" cy="50" r="3.6" fill="#3a2a1a"/><circle cx="69" cy="50" r="3.6" fill="#3a2a1a"/>
-  <circle cx="52.2" cy="48.8" r="1.2" fill="#fff"/><circle cx="70.2" cy="48.8" r="1.2" fill="#fff"/>`;
-  const mouth = asleep
-    ? `<ellipse cx="60" cy="63" rx="3" ry="2.2" fill="#7a4a2a"/>`
-    : `<path d="M52,62 Q60,68 68,62" fill="none" stroke="#7a4a2a" stroke-width="2.6" stroke-linecap="round"/>`;
-  const zzz = asleep
-    ? `<g class="zzz" font-family="Georgia, serif" font-weight="800" fill="#5b86c9"><text x="96" y="30" font-size="18">z</text><text x="110" y="18" font-size="14">z</text><text x="121" y="9" font-size="11">z</text></g>`
+    ? `<path d="M49,55 Q53,58.5 57,55 M63,55 Q67,58.5 71,55" fill="none" stroke="#3a2a1a" stroke-width="2.4" stroke-linecap="round"/>`
+    : `<circle cx="53" cy="55" r="2.8" fill="#3a2a1a"/><circle cx="67" cy="55" r="2.8" fill="#3a2a1a"/><circle cx="53.9" cy="54" r="0.9" fill="#fff"/><circle cx="67.9" cy="54" r="0.9" fill="#fff"/>`;
+  const hat = asleep
+    ? `<path d="M38,51 Q44,26 58,14 Q78,4 93,30 Q80,20 70,23 Q76,37 82,51 Q60,43 38,51 Z" fill="#d9433a" stroke="#8a1f19" stroke-width="2.4" stroke-linejoin="round"/>`
+    : `<path d="M38,51 Q48,26 58,7 Q62,1 66,7 Q73,28 82,51 Q60,43 38,51 Z" fill="#d9433a" stroke="#8a1f19" stroke-width="2.4" stroke-linejoin="round"/>`;
+  // A little moss on the hat brim and one patch on the side: that is his name.
+  const moss = [[41, 49.2], [47, 47.6], [53, 46.6], [60, 46.2], [67, 46.6], [73, 47.6], [79, 49.2]]
+    .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="3.3" fill="#7cb35a" stroke="#4a7a33" stroke-width="1"/>`).join("") +
+    `<ellipse cx="51" cy="34" rx="4" ry="3" fill="#7cb35a" stroke="#4a7a33" stroke-width="1"/>`;
+  const rightArm = asleep
+    ? `<path d="M80,90 Q88,100 74,103" fill="none" stroke="#4f7fc4" stroke-width="9" stroke-linecap="round"/><circle cx="73" cy="103" r="5" fill="${skin}" stroke="${skinEdge}" stroke-width="1.5"/>`
+    : `<path d="M80,90 Q93,85 95,72" fill="none" stroke="#4f7fc4" stroke-width="9" stroke-linecap="round"/>` +
+      `<path d="M94,74 L101,52" stroke="#8a5a33" stroke-width="5" stroke-linecap="round"/><path d="M101,52 L104.5,41" stroke="#9aa3ad" stroke-width="4" stroke-linecap="round"/><path d="M103,44 L106,43" stroke="#d5dbe1" stroke-width="1.5"/>` +
+      `<circle cx="95" cy="71" r="5" fill="${skin}" stroke="${skinEdge}" stroke-width="1.5"/>`;
+  const restingTool = asleep
+    ? `<path d="M90,121 L108,116" stroke="#8a5a33" stroke-width="5" stroke-linecap="round"/><path d="M108,116 L116,114" stroke="#9aa3ad" stroke-width="4" stroke-linecap="round"/>`
     : "";
-  return `<svg class="sphinx ${asleep ? "asleep" : "awake"} ${cls}" viewBox="0 0 160 120" role="img" aria-label="The garden sphinx${asleep ? ", asleep" : ""}">
+  const mouth = asleep
+    ? `<ellipse cx="60" cy="73.5" rx="2.2" ry="1.8" fill="#7a4a2a"/>`
+    : `<path d="M55.5,72.5 Q60,76 64.5,72.5" fill="none" stroke="#7a4a2a" stroke-width="2" stroke-linecap="round"/>`;
+  const zzz = asleep
+    ? `<g class="zzz" font-family="Georgia, serif" font-weight="800" fill="#5b86c9"><text x="98" y="20" font-size="15">z</text><text x="108" y="11" font-size="12">z</text><text x="114" y="4" font-size="9">z</text></g>`
+    : "";
+  return `<svg class="gnome ${asleep ? "asleep" : "awake"} ${cls}" viewBox="0 0 124 130" role="img" aria-label="${label}">
   ${zzz}
-  <ellipse cx="80" cy="112" rx="72" ry="8" fill="rgba(60,40,20,.18)"/>
-  <rect x="18" y="64" width="128" height="44" rx="20" fill="#e2b872" stroke="#9c7438" stroke-width="3"/>
-  <path d="M132,80 q22,-4 18,20" fill="none" stroke="#9c7438" stroke-width="5" stroke-linecap="round"/>
-  <rect x="12" y="92" width="44" height="16" rx="8" fill="#e8c283" stroke="#9c7438" stroke-width="3"/>
-  <path d="M34,22 L86,22 L96,78 L24,78 Z" fill="#5b86c9" stroke="#2f4f86" stroke-width="3" stroke-linejoin="round"/>
-  <path d="M42,30 L78,30 M38,44 L82,44 M34,58 L86,58" stroke="#f2cf5b" stroke-width="5" stroke-linecap="round"/>
-  <ellipse cx="60" cy="50" rx="22" ry="25" fill="#f0c98a" stroke="#9c7438" stroke-width="3"/>
-  <path d="M38,34 Q60,18 82,34 L82,40 Q60,30 38,40 Z" fill="#5b86c9" stroke="#2f4f86" stroke-width="2.5"/>
+  <ellipse cx="62" cy="124" rx="40" ry="5" fill="rgba(60,40,20,.18)"/>
+  ${restingTool}
+  <ellipse cx="48" cy="119" rx="12" ry="6" fill="#6b4423" stroke="#3e2612" stroke-width="2"/>
+  <ellipse cx="72" cy="119" rx="12" ry="6" fill="#6b4423" stroke="#3e2612" stroke-width="2"/>
+  <path d="M38,118 Q35,86 60,80 Q85,86 82,118 Z" fill="#4f7fc4" stroke="#2f4f86" stroke-width="2.4" stroke-linejoin="round"/>
+  <rect x="38" y="104" width="44" height="6" fill="#6b4423"/><rect x="56" y="102.5" width="8" height="9" rx="1.5" fill="#f2cf5b" stroke="#8a6a12" stroke-width="1.2"/>
+  <path d="M40,90 Q30,100 37,109" fill="none" stroke="#4f7fc4" stroke-width="9" stroke-linecap="round"/><circle cx="38" cy="110" r="5" fill="${skin}" stroke="${skinEdge}" stroke-width="1.5"/>
+  <circle cx="60" cy="58" r="15" fill="${skin}" stroke="${skinEdge}" stroke-width="2"/>
+  <path d="M42,62 Q40,98 60,106 Q80,98 78,62 Q70,70 60,69 Q50,70 42,62 Z" fill="#fbfaf6" stroke="#b9b09d" stroke-width="1.8" stroke-linejoin="round"/>
+  <path d="M50,82 q3,4 0,8 M60,86 q3,4 0,8 M70,82 q3,4 0,8" fill="none" stroke="#d6cfbf" stroke-width="1.5" stroke-linecap="round"/>
+  ${rightArm}
+  <circle cx="48" cy="63" r="3.2" fill="#f29a86" opacity=".6"/><circle cx="72" cy="63" r="3.2" fill="#f29a86" opacity=".6"/>
   ${eyes}
+  <path d="M48,50 Q53,46 58,50 M62,50 Q67,46 72,50" fill="none" stroke="#b9b09d" stroke-width="4.6" stroke-linecap="round"/>
+  <path d="M48,50 Q53,46 58,50 M62,50 Q67,46 72,50" fill="none" stroke="#fbfaf6" stroke-width="3" stroke-linecap="round"/>
+  <path d="M60,67 Q52,62 45,69 Q53,71.5 60,68.5 Q67,71.5 75,69 Q68,62 60,67 Z" fill="#fff" stroke="#b9b09d" stroke-width="1.4"/>
+  <ellipse cx="60" cy="63" rx="5.4" ry="4.8" fill="#f0a08a" stroke="#b56a55" stroke-width="1.4"/>
   ${mouth}
-  <circle cx="46" cy="58" r="3.4" fill="#f2a28a" opacity=".7"/><circle cx="74" cy="58" r="3.4" fill="#f2a28a" opacity=".7"/>
-  <path d="M60,75 L60,86" stroke="#9c7438" stroke-width="3"/>
-  <g transform="translate(118 60) scale(.32)">${flowerInner(FLOWERS[0]).replace(/<path d="M50,58[^>]*\/>/, "")}</g>
+  ${hat}
+  ${moss}
 </svg>`;
 }
 
@@ -285,8 +462,10 @@ export function chestSVG(open) {
 }
 
 // ---- Garden sculptures ------------------------------------------------------
-// Each is six parts drawn bottom-up in a 100 x 120 box. Parts not built yet
-// show as faint dashed outlines, so the goal is plain from the first visit.
+// Each is six parts drawn bottom-up in a 100 x 120 box. Only the parts already
+// carved are drawn: nothing shows what is still to come, so each one is a
+// surprise until it is finished. A half piece is a rough, uncarved block where
+// the next part will go; a sculpture not yet begun is a plain stone.
 
 const STONE = { s: "#dcd6c8", l: "#efebe2", d: "#c5bdab", e: "#7d7566", a: "#c08a3e", al: "#f0d9a6", ae: "#7a5418" };
 const GOLD = { s: "#ffd65a", l: "#fff0a8", d: "#f0b830", e: "#a87a08", a: "#e89a00", al: "#fff6c8", ae: "#8a5a00" };
@@ -370,46 +549,93 @@ const SCULPTURE_PARTS = {
       `<ellipse cx="20" cy="82" rx="5" ry="2.6" fill="#5aab48"/><ellipse cx="80" cy="70" rx="5" ry="2.6" fill="#5aab48"/><ellipse cx="36" cy="34" rx="5" ry="2.6" fill="#5aab48" transform="rotate(-35 36 34)"/>` +
       rose(24, 96) + rose(24, 70) + rose(27.5, 43) + rose(41, 31.6) + rose(59, 31.6) + rose(72.5, 43) + rose(76, 82) + rose(76, 100),
   ],
-  sphinx: (p) => [
+  rabbit: (p) => [
     stdBase(p),
     R(18, 88, 64, 15, p.s, p.e) + `<rect x="21" y="90" width="58" height="3" rx="1.5" fill="${p.l}"/>`,
-    P("M36,88 L36,68 Q38,60 50,60 L70,60 Q83,60 83,74 L83,88 Z", p.s, p.e) + `<path d="M66,72 Q72,80 70,88" fill="none" stroke="${p.e}" stroke-width="1.4" opacity=".6"/>`,
-    P("M21,30 L45,30 L51,68 L15,68 Z", p.d, p.e) + `<path d="M23,40 L44,40 M20,50 L47,50 M18,60 L49,60" stroke="${p.e}" stroke-width="1.5" opacity=".6"/>` +
-      `<ellipse cx="33" cy="45" rx="11" ry="13" fill="${p.l}" stroke="${p.e}" ${W}/>` + P("M21,33 Q33,22 45,33 L45,37 Q33,30 21,37 Z", p.d, p.e) +
-      `<circle cx="29" cy="45" r="1.8" fill="${p.e}"/><circle cx="37" cy="45" r="1.8" fill="${p.e}"/><path d="M29,52 Q33,55 37,52" fill="none" stroke="${p.e}" stroke-width="1.6" stroke-linecap="round"/>`,
-    R(12, 80, 30, 8, p.l, p.e, 4) + `<path d="M83,80 Q95,76 91,62" fill="none" stroke="${p.e}" stroke-width="3.4" stroke-linecap="round"/><circle cx="91" cy="60" r="3.4" fill="${p.d}" stroke="${p.e}" stroke-width="1.4"/>`,
+    `<ellipse cx="54" cy="72" rx="24" ry="17" fill="${p.s}" stroke="${p.e}" ${W}/><ellipse cx="46" cy="76" rx="11" ry="10" fill="${p.l}"/>` +
+      `<circle cx="78" cy="76" r="6" fill="${p.l}" stroke="${p.e}" stroke-width="1.6"/>` +
+      `<ellipse cx="38" cy="86" rx="7" ry="3.4" fill="${p.l}" stroke="${p.e}" stroke-width="1.6"/><ellipse cx="54" cy="86.5" rx="7" ry="3.4" fill="${p.l}" stroke="${p.e}" stroke-width="1.6"/>`,
+    `<circle cx="40" cy="48" r="14" fill="${p.s}" stroke="${p.e}" ${W}/><ellipse cx="38" cy="53" rx="7" ry="5" fill="${p.l}"/>` +
+      `<circle cx="34.5" cy="45" r="2" fill="${p.e}"/><circle cx="45" cy="45" r="2" fill="${p.e}"/>` +
+      `<path d="M37.5,51 L42,51 L39.75,53.6 Z" fill="${p.a}" stroke="${p.ae}" stroke-width="1"/><path d="M39.75,53.6 Q37,57 34.5,55.5 M39.75,53.6 Q42.5,57 45,55.5" fill="none" stroke="${p.e}" stroke-width="1.2" stroke-linecap="round"/>`,
+    `<ellipse cx="33" cy="21" rx="5.4" ry="15" fill="${p.s}" stroke="${p.e}" ${W} transform="rotate(-12 33 21)"/><ellipse cx="33" cy="22" rx="2.4" ry="10" fill="${p.l}" transform="rotate(-12 33 21)"/>` +
+      `<ellipse cx="48" cy="21" rx="5.4" ry="15" fill="${p.s}" stroke="${p.e}" ${W} transform="rotate(14 48 21)"/><ellipse cx="48" cy="22" rx="2.4" ry="10" fill="${p.l}" transform="rotate(14 48 21)"/>`,
     [0, 1, 2, 3, 4].map((i) => {
-      const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
-      return `<circle cx="${(33 + Math.cos(a) * 4.2).toFixed(1)}" cy="${(24 + Math.sin(a) * 4.2).toFixed(1)}" r="3.4" fill="#ff8fb3" stroke="#c4507e" stroke-width="1"/>`;
-    }).join("") + `<circle cx="33" cy="24" r="2.6" fill="#ffd23f"/><circle cx="22" cy="29" r="2.4" fill="#c79ae8"/><circle cx="44" cy="29" r="2.4" fill="#ffd23f"/>`,
+      const x = 28 + i * 6;
+      const c = ["#ff8fb3", "#ffd23f", "#c79ae8", "#ffd23f", "#ff8fb3"][i];
+      return `<circle cx="${x}" cy="${(36 - Math.sin((i / 4) * Math.PI) * 2.5).toFixed(1)}" r="3.2" fill="${c}" stroke="#a8506e" stroke-width="0.9"/>`;
+    }).join("") + `<path d="M26,37 Q40,31 54,37" fill="none" stroke="#3d8a37" stroke-width="1.6"/>`,
   ],
 };
 
-let clipSeq = 0;
+// Where each part goes, as a rough block: [centre x, bottom y, width, height].
+const ROUGH = {
+  sundial: [[50, 116, 64, 13], [50, 103, 44, 17], [50, 86, 24, 40], [50, 44, 60, 12], [57, 34, 18, 22], [22, 26, 22, 22]],
+  birdbath: [[50, 116, 64, 13], [50, 103, 44, 17], [50, 86, 16, 34], [50, 59, 72, 22], [50, 42, 62, 6], [70, 38, 28, 18]],
+  owl: [[50, 116, 64, 13], [50, 103, 44, 17], [50, 88, 40, 44], [50, 87, 56, 30], [50, 51, 40, 38], [50, 42, 28, 14]],
+  fountain: [[50, 116, 86, 25], [50, 92, 18, 28], [50, 76, 58, 18], [50, 59, 36, 20], [50, 35, 14, 24], [50, 30, 30, 14]],
+  arch: [[50, 116, 76, 12], [50, 104, 68, 48], [33, 56, 34, 34], [67, 56, 34, 34], [50, 40, 12, 22], [50, 104, 60, 16]],
+  rabbit: [[50, 116, 64, 13], [50, 103, 62, 15], [55, 88, 50, 34], [40, 62, 28, 28], [40, 36, 26, 30], [40, 40, 30, 10]],
+};
+
+function roughBlock(cx, bottom, w, h, p) {
+  const l = cx - w / 2;
+  const r = cx + w / 2;
+  const t = bottom - h;
+  const j = Math.min(4, h / 4);
+  const pts = [[l, bottom], [l + 1, t + j], [l + w * 0.3, t], [l + w * 0.55, t + j * 0.7], [r - w * 0.2, t + j * 0.2], [r - 1, t + j * 1.2], [r, bottom]];
+  const d = `M${pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" L")} Z`;
+  const marks = h > 10
+    ? `<path d="M${(l + w * 0.25).toFixed(1)},${(t + h * 0.45).toFixed(1)} l${(w * 0.12).toFixed(1)},${(h * 0.2).toFixed(1)} M${(l + w * 0.6).toFixed(1)},${(t + h * 0.35).toFixed(1)} l${(w * 0.1).toFixed(1)},${(h * 0.25).toFixed(1)}" stroke="${p.e}" stroke-width="1.2" opacity=".5" stroke-linecap="round"/>`
+    : "";
+  return `<g class="sc-rough"><path d="${d}" fill="${p.d}" stroke="${p.e}" stroke-width="1.8" stroke-linejoin="round"/>${marks}</g>`;
+}
 
 // built: whole pieces in place (0-6); half: half of the next piece is in;
 // newPart: index of a part that drops in with an animation.
 export function sculptureInner(id, { gold = false, built = PIECES, half = false, newPart = -1 } = {}) {
-  const parts = SCULPTURE_PARTS[id](gold ? GOLD : STONE);
+  const pal = gold ? GOLD : STONE;
+  const parts = SCULPTURE_PARTS[id](pal);
   let s = `<ellipse cx="50" cy="116" rx="42" ry="4" fill="rgba(40,30,10,.16)"/>`;
   parts.forEach((d, i) => {
-    if (i < built) {
-      s += `<g class="${i === newPart ? "sc-new" : ""}">${d}</g>`;
-      return;
-    }
-    s += `<g class="sc-ghost">${d}</g>`;
-    if (i === built && half) {
-      const id2 = `sch-${++clipSeq}`;
-      s += `<clipPath id="${id2}"><rect x="0" y="0" width="50" height="120"/></clipPath><g class="sc-half ${i === newPart ? "sc-new" : ""}" clip-path="url(#${id2})">${d}</g>`;
-    }
+    if (i < built) s += `<g class="${i === newPart ? "sc-new" : ""}">${d}</g>`;
   });
+  if (built < PIECES && half) {
+    const [cx, bottom, w, h] = ROUGH[id][built];
+    s += `<g class="${built === newPart ? "sc-new" : ""}">${roughBlock(cx, bottom, Math.max(w * 0.8, 20), Math.max(h * 0.8, 18), STONE)}</g>`;
+  } else if (built === 0) {
+    s += roughBlock(50, 116, 40, 30, STONE);
+  }
   if (gold && built >= PIECES) s += sparkle(12, 14, 6) + sparkle(90, 40, 5);
   return s;
 }
 
+// A sculpture under a cloth: for ones still being carved (the collection)
+// and the moment before the last piece is shown.
+export function coveredSVG({ cls = "", label = "A sculpture still under its cloth", mark = "?" } = {}) {
+  return `<svg class="sculpture covered ${cls}" viewBox="0 0 100 120" role="img" aria-label="${label}">
+  <ellipse cx="50" cy="116" rx="42" ry="4" fill="rgba(40,30,10,.16)"/>
+  <path d="M16,114 Q14,78 26,52 Q34,26 50,22 Q66,26 74,52 Q86,78 84,114 Q74,108 66,114 Q58,108 50,114 Q42,108 34,114 Q26,108 16,114 Z" fill="#d9cbb0" stroke="#9c8a68" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M38,40 Q34,72 30,108 M62,40 Q66,72 70,108 M50,30 L50,108" fill="none" stroke="#b7a483" stroke-width="1.6" stroke-linecap="round" opacity=".8"/>
+  <circle cx="50" cy="22" r="4" fill="#c9443f" stroke="#8a1f19" stroke-width="1.2"/>
+  ${mark ? `<text x="50" y="84" text-anchor="middle" font-size="34" font-weight="800" fill="#7d6a48" font-family="Georgia, serif">${mark}</text>` : ""}
+</svg>`;
+}
+
+// fit: crop the empty space above an unfinished sculpture (the picture is
+// only as tall as what has been carved, so a first stone is not lost in a
+// big blank).
 export function sculptureSVG(id, opts = {}) {
-  const { cls = "", label = "Garden sculpture" } = opts;
-  return `<svg class="sculpture ${cls}" viewBox="0 0 100 120" role="img" aria-label="${label}">${sculptureInner(id, opts)}</svg>`;
+  const { cls = "", label = "Garden sculpture", fit = false, built = PIECES, half = false } = opts;
+  let box = "0 0 100 120";
+  let style = "";
+  if (fit && built < PIECES) {
+    const tops = ROUGH[id].slice(0, built + (half ? 1 : 0)).map(([, b, , h]) => b - h);
+    const top = Math.max(0, Math.min(86, ...tops) - 14);
+    box = `0 ${top} 100 ${120 - top}`;
+    style = `style="height:${((120 - top) * 1.5).toFixed(0)}px"`;
+  }
+  return `<svg class="sculpture ${cls}" viewBox="${box}" ${style} role="img" aria-label="${label}">${sculptureInner(id, opts)}</svg>`;
 }
 
 export { FLOWERS, SPECIALS };
