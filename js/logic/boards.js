@@ -3,36 +3,45 @@
 // bonus board (unlocked by the code).
 //
 // Tuning knobs per board: kinds = how many different symbols; cap = how many
-// kinds the intended clearing order ever holds half-finished at once (1..3);
-// pOpen = how eagerly that order starts a new kind. Seeds were chosen with
-// `npm run tune`, which plays each board with a simple simulated player.
+// sets of three the intended clearing order ever holds half-finished at once
+// (1..3); pOpen = how eagerly that order starts a new set; together = how
+// often a set's three tiles are all in view at once (gentler). Seeds were
+// chosen with `npm run tune`, which plays each board with a simple simulated
+// player: win rates kept where they were before the variety change, with
+// no more than 3 tappable tiles of one kind at the start and no more than 4
+// in any simulated game.
 
 import { LAYOUTS, BONUS_LAYOUT, layoutById } from "./layouts.js";
 import { makeDeal } from "./deal.js";
 import { hashString } from "./rng.js";
-import { winRate } from "./playtest.js";
+import { casualStats } from "./playtest.js";
 
 export const PATH = [
-  { layout: "seedling", seed: 11, kinds: 3, cap: 1, pOpen: 0.3 },
-  { layout: "two-beds", seed: 22, kinds: 4, cap: 2, pOpen: 0.3 },
-  { layout: "diamond", seed: 33, kinds: 4, cap: 2, pOpen: 0.4 },
-  { layout: "heart", seed: 44, kinds: 5, cap: 2, pOpen: 0.4 },
-  { layout: "cross", seed: 55, kinds: 5, cap: 2, pOpen: 0.5 },
-  { layout: "butterfly", seed: 66, kinds: 6, cap: 2, pOpen: 0.5 },
-  { layout: "cottage", seed: 77, kinds: 6, cap: 3, pOpen: 0.4 },
-  { layout: "tree", seed: 88, kinds: 6, cap: 3, pOpen: 0.5 },
-  { layout: "mushroom", seed: 37, kinds: 7, cap: 3, pOpen: 0.5 },
-  { layout: "sunflower", seed: 47, kinds: 7, cap: 3, pOpen: 0.5 },
-  { layout: "watering-can", seed: 8, kinds: 8, cap: 3, pOpen: 0.5 },
-  { layout: "great-garden", seed: 39, kinds: 8, cap: 3, pOpen: 0.6 },
+  { layout: "seedling", seed: 3, kinds: 5, cap: 2, pOpen: 0.3, together: 0.3 },
+  { layout: "two-beds", seed: 8, kinds: 6, cap: 2, pOpen: 0.3, together: 0.3 },
+  { layout: "diamond", seed: 5, kinds: 6, cap: 2, pOpen: 0.3, together: 0.3 },
+  { layout: "heart", seed: 14, kinds: 7, cap: 2, pOpen: 0.3, together: 0.9 },
+  { layout: "cross", seed: 3, kinds: 7, cap: 2, pOpen: 0.3, together: 0.3 },
+  { layout: "butterfly", seed: 23, kinds: 10, cap: 2, pOpen: 0.3, together: 0.9 },
+  { layout: "cottage", seed: 17, kinds: 10, cap: 2, pOpen: 0.3, together: 0.6 },
+  { layout: "tree", seed: 22, kinds: 9, cap: 2, pOpen: 0.3, together: 0.9 },
+  { layout: "mushroom", seed: 12, kinds: 9, cap: 2, pOpen: 0.3, together: 0.6 },
+  { layout: "sunflower", seed: 23, kinds: 11, cap: 2, pOpen: 0.3, together: 0.9 },
+  { layout: "watering-can", seed: 33, kinds: 11, cap: 1, pOpen: 0.5, together: 0.3 },
+  { layout: "great-garden", seed: 25, kinds: 12, cap: 2, pOpen: 0.3, together: 0.9 },
 ];
 
 // The daily board draws from the middle of the path: big enough to be a real
 // round, small enough for two minutes. Consecutive days never share a shape.
 export const DAILY_POOL = [2, 3, 4, 5, 6, 7, 8, 9, 10];
-export const DAILY_TUNING = { cap: 2, pOpen: 0.5 };
+// Daily boards use their path board's tuning, with these changes (by path
+// index) so fresh deals land in the friendly band with the variety limits.
+export const DAILY_TUNING = {
+  5: { together: 0.6 },
+  10: { cap: 2, pOpen: 0.3, together: 0.9 },
+};
 
-export const BONUS_TUNING = { kinds: 6, cap: 2, pOpen: 0.5 };
+export const BONUS_TUNING = { kinds: 8, cap: 2, pOpen: 0.3, together: 0.9 };
 
 function dealFor(layoutId, opts) {
   return makeDeal(layoutById(layoutId), opts);
@@ -54,30 +63,54 @@ export function dailyLayoutIndex(day) {
 }
 
 // Daily and bonus boards are dealt fresh, so each candidate deal is played by
-// the simulated casual player and the first one inside a friendly band is
-// kept (same result on every phone: everything here is deterministic).
+// the simulated casual player and the first one inside a friendly band, where
+// few games ever show more than 4 tappable tiles of one kind, is kept (same
+// result on every phone: everything here is deterministic). Every deal opens
+// with no more than 3 of one kind (makeDeal sees to that).
 export const FRIENDLY_BAND = [0.75, 0.98];
+export const MOSTLY_VARIED = 0.15; // most games showing more than 4 of a kind
 const BAND_GAMES = 60;
-const BAND_TRIES = 12;
+const BAND_TRIES = 40;
 
 function friendlyDeal(layout, tuning, seedBase) {
   let fallback = null;
   for (let t = 0; t < BAND_TRIES; t++) {
     const deal = makeDeal(layout, { ...tuning, seed: hashString(`${seedBase}-${t}`) });
-    const rate = winRate(deal, BAND_GAMES, 777);
-    if (rate >= FRIENDLY_BAND[0] && rate <= FRIENDLY_BAND[1]) return deal;
-    if (!fallback || Math.abs(rate - 0.86) < fallback.gap) fallback = { deal, gap: Math.abs(rate - 0.86) };
+    const { win, over4 } = casualStats(deal, BAND_GAMES, 777);
+    if (win >= FRIENDLY_BAND[0] && win <= FRIENDLY_BAND[1] && over4 <= MOSTLY_VARIED) return deal;
+    const gap = Math.abs(win - 0.86) + over4;
+    if (!fallback || gap < fallback.gap) fallback = { deal, gap };
   }
   return fallback.deal;
 }
 
+export function dailyTuning(index) {
+  const { layout, seed, ...t } = PATH[index];
+  return { ...t, ...(DAILY_TUNING[index] || {}) };
+}
+
+// Dealing a daily or bonus board plays it many times, so each is kept once made.
+const made = new Map();
+function once(key, make) {
+  if (!made.has(key)) made.set(key, make());
+  return made.get(key);
+}
+
 export function dailyBoard(day) {
-  const b = PATH[dailyLayoutIndex(day)];
-  const deal = friendlyDeal(layoutById(b.layout), { kinds: b.kinds, ...DAILY_TUNING }, `daily-${day}`);
+  return once(`daily-${day}`, () => dealDaily(day));
+}
+
+function dealDaily(day) {
+  const i = dailyLayoutIndex(day);
+  const deal = friendlyDeal(layoutById(PATH[i].layout), dailyTuning(i), `daily-${day}`);
   return { kind: "daily", day, title: "Today's board", deal };
 }
 
 export function bonusBoard(week) {
+  return once(`bonus-${week}`, () => dealBonus(week));
+}
+
+function dealBonus(week) {
   const deal = friendlyDeal(BONUS_LAYOUT, BONUS_TUNING, `bonus-${week}`);
   return { kind: "bonus", week, title: "Bonus board", deal };
 }

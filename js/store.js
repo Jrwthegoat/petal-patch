@@ -3,8 +3,9 @@
 import { emptyStreak } from "./logic/streak.js";
 import { emptyGarden } from "./logic/garden.js";
 import { emptySphinx, migrateSphinx } from "./logic/sphinx.js";
-import { emptySculpture } from "./logic/sculpture.js";
+import { emptySculpture, migrateSculpture } from "./logic/sculpture.js";
 import { emptyStats } from "./logic/stats.js";
+import { loadRaw, saveRaw } from "./logic/testmode.js";
 
 // The key stays the same across versions so saved gardens are never lost;
 // fromSaved() moves older shapes forward.
@@ -37,20 +38,44 @@ export function fromSaved(saved) {
   const base = defaults();
   if (!saved || typeof saved !== "object") return base;
   const out = { ...base, ...saved };
-  for (const k of ["streak", "garden", "sculpture", "stats"]) out[k] = { ...base[k], ...(saved[k] || {}) };
+  for (const k of ["streak", "garden", "stats"]) out[k] = { ...base[k], ...(saved[k] || {}) };
   out.stats.sphinx = { ...base.stats.sphinx, ...(out.stats.sphinx || {}) };
   // Version 1 kept the daily chest inside the sphinx.
   if (out.chestDay == null && saved.sphinx && saved.sphinx.chestDay != null) out.chestDay = saved.sphinx.chestDay;
   out.sphinx = migrateSphinx(saved.sphinx);
+  // Sculptures had six pieces each before; finished ones stay finished.
+  out.sculpture = migrateSculpture(saved.sculpture);
   out.v = 2;
   return out;
 }
 
+// The browser's storage, if there is any (none under Node).
+function stores() {
+  try {
+    return { local: window.localStorage, session: window.sessionStorage };
+  } catch (e) {
+    return null;
+  }
+}
+
+// In the owner's test mode the game reads and writes a separate copy (see
+// js/logic/testmode.js); otherwise the real save.
 export function load() {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return defaults();
+    const st = stores();
+    const raw = loadRaw(st.local, st.session, KEY);
+    if (!raw || raw === "null") return defaults();
     return fromSaved(JSON.parse(raw));
+  } catch (e) {
+    return defaults();
+  }
+}
+
+// The real save only, whatever mode the game is in (the stats page).
+export function loadReal() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    return raw ? fromSaved(JSON.parse(raw)) : defaults();
   } catch (e) {
     return defaults();
   }
@@ -58,7 +83,8 @@ export function load() {
 
 export function save(state) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(state));
+    const st = stores();
+    saveRaw(st.local, st.session, KEY, JSON.stringify(state));
   } catch (e) {
     // Private mode or storage full: the game still plays, it just won't remember.
   }

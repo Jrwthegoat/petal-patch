@@ -3,8 +3,8 @@
 // No images to load, so everything looks the same on every phone.
 
 import { FLOWERS, SPECIALS, VISITORS, completedSets, flowerById } from "./logic/garden.js";
-import { mulberry32, hashString } from "./logic/rng.js";
-import { PIECES, piecesText } from "./logic/sculpture.js";
+import { mulberry32, hashString, shuffle } from "./logic/rng.js";
+import { SCULPTURES } from "./logic/sculpture.js";
 
 const CX = 50;
 const CY = 44;
@@ -172,10 +172,10 @@ function fireflies() {
 const VISITOR_SPOTS = {
   owl: { near: "orchard", at: [56, 100], else: [34, 160] },
   chipmunk: { near: "orchard", at: [86, 168], else: [86, 168] },
-  bird: { near: "meadow", at: [330, 128], else: [334, 164] },
+  bird: { near: "meadow", at: [174, 128], else: [334, 164] },
   dove: { near: "meadow", at: [226, 128], else: [232, 164] },
   duck: { near: "pond", at: [292, 226], else: [300, 226] },
-  frog: { near: "pond", at: [326, 230], else: [326, 230] },
+  frog: { near: "pond", at: [326, 230], else: [338, 256] },
   turtle: { near: "pond", at: [228, 254], else: [228, 254] },
   rabbit: { near: null, at: [72, 214] },
   hedgehog: { near: null, at: [30, 252] },
@@ -195,24 +195,8 @@ const SC_W = 84;
 const SC_H = 101;
 const SC_ROW = 132;
 
-// Flower bed: five to a row, one soil strip per row.
-const PER_ROW = 5;
-const FW = 58;
-const FH = 70;
-const BED_ROW = 76;
-const BED_H = 66;
-
-export function flowerSpot(i, top) {
-  const row = Math.floor(i / PER_ROW);
-  const col = i % PER_ROW;
-  const rng = mulberry32(hashString(`spot-${i}`));
-  const x = 22 + col * 64 + (rng() * 4 - 2);
-  const y = top + row * BED_ROW - 4;
-  return { x, y, w: FW, h: FH };
-}
-
 function lawn(view, newPiece, top, sculptureName) {
-  const items = view.finished.map((f) => ({ ...f, built: PIECES, half: false, done: true }));
+  const items = view.finished.map((f) => ({ ...f, built: f.total, half: false, done: true }));
   items.push({ ...view.current, done: false });
   const rows = Math.ceil(items.length / SC_PER_ROW);
   let s = "";
@@ -230,13 +214,7 @@ function lawn(view, newPiece, top, sculptureName) {
     const y = top + row * SC_ROW + 2;
     const opts = { gold: it.gold, built: it.built, half: it.half, newPart: !it.done && newPiece ? it.built - 1 : -1 };
     const name = sculptureName(it);
-    s += `<g class="item" data-name="${name}"><svg x="${x}" y="${y}" width="${SC_W}" height="${SC_H}" viewBox="0 0 100 120" class="${it.done ? "" : "building"}">${sculptureInner(it.sculpture.id, opts)}</svg>`;
-    if (!it.done) {
-      const label = piecesText(it.built, it.half);
-      s += `<rect x="${x + SC_W / 2 - 28}" y="${y + SC_H + 1}" width="56" height="20" rx="10" fill="#fff8ec" stroke="#b9a98a"/>`;
-      s += `<text x="${x + SC_W / 2}" y="${y + SC_H + 16}" text-anchor="middle" font-size="14" font-weight="800" fill="#24502a">${label}</text>`;
-    }
-    s += `</g>`;
+    s += `<g class="item" data-name="${name}"><svg x="${x}" y="${y}" width="${SC_W}" height="${SC_H}" viewBox="0 0 100 120" class="${it.done ? "" : "building"}">${sculptureInner(it.sculpture.id, opts)}</svg></g>`;
   });
   return { svg: s, height: rows * SC_ROW, stops };
 }
@@ -283,29 +261,157 @@ function flowerDefs(list) {
   }).join("");
 }
 
-// Flower rows: entries are { k, i } (i = index in planted, for the bloom-in).
+// The flower beds: planted by nature, not in rows. Flowers fill beds of
+// BED_SPOTS spots each, one bed below the other as the garden grows. Each
+// bed's spots are scattered (clusters and gaps, small differences in size and
+// lean) and are filled in a jumbled order, so new flowers pop up all over the
+// bed rather than left to right. Everything is worked out from the flower's
+// place in the planted list, so the garden never reshuffles between visits.
+// Blooms never cover one another (their centres are kept apart); a flower in
+// front may cross the stem of one behind.
+const FW = 58;
+const FH = 70;
+const BED_SPOTS = 12;
+const BED_H = 170;
+// From the foot of a flower's stem to the centre of its bloom, and the
+// bloom's radius, at full size (the flower symbol is 100 x 120: bloom centre
+// at 50,44, petals reach 37 out, stem foot at 118).
+const BLOOM_UP = (FH * 74) / 120;
+const BLOOM_R = (FW * 37) / 100;
+
+function bloomOf(spot) {
+  const a = (spot.lean * Math.PI) / 180;
+  const up = BLOOM_UP * spot.s;
+  return { cx: spot.x + Math.sin(a) * up, cy: spot.y - Math.cos(a) * up, r: BLOOM_R * spot.s };
+}
+
+const bedCache = new Map();
+
+// The spots of bed number b, in the order they are filled. Spot coordinates
+// are relative to the bed's top: x, y is the foot of the stem.
+export function bedSpots(b) {
+  if (bedCache.has(b)) return bedCache.get(b);
+  let spots = null;
+  for (let attempt = 0; !spots; attempt++) {
+    const rng = mulberry32(hashString(`bed-${b}-${attempt}`));
+    const centres = Array.from({ length: 3 + Math.floor(rng() * 2) }, () => [40 + rng() * 280, 95 + rng() * 50]);
+    const list = [];
+    for (let tries = 0; tries < 4000 && list.length < BED_SPOTS; tries++) {
+      let x;
+      let y;
+      if (rng() < 0.7) {
+        const [cx, cy] = centres[Math.floor(rng() * centres.length)];
+        x = cx + (rng() + rng() + rng() - 1.5) * 70;
+        y = cy + (rng() + rng() - 1) * 40;
+      } else {
+        x = 30 + rng() * 300;
+        y = 76 + rng() * 86;
+      }
+      const spot = { x, y, s: 0.86 + rng() * 0.2, lean: Math.round((rng() * 2 - 1) * 7) };
+      const bl = bloomOf(spot);
+      if (y > BED_H - 8 || y < 70 || bl.cx - bl.r < 14 || bl.cx + bl.r > 346 || bl.cy - bl.r < 4) continue;
+      if (list.some((o) => {
+        const ob = bloomOf(o);
+        return Math.hypot(ob.cx - bl.cx, ob.cy - bl.cy) < ob.r + bl.r + 1.5;
+      })) continue;
+      list.push(spot);
+    }
+    if (list.length < BED_SPOTS) continue;
+    // Fill order: jumbled, but the first flower of a bed goes near the middle.
+    const order = shuffle(rng, list);
+    const mid = order.findIndex((p) => p.x > 110 && p.x < 250);
+    if (mid > 0) [order[0], order[mid]] = [order[mid], order[0]];
+    spots = order.map((p) => ({ ...p, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 }));
+  }
+  bedCache.set(b, spots);
+  return spots;
+}
+
+// Where flower number i (its place in the planted list) grows, in scene
+// units, for beds starting at `top`.
+export function flowerSpot(i, top) {
+  const b = Math.floor(i / BED_SPOTS);
+  const sp = bedSpots(b)[i % BED_SPOTS];
+  const y = top + b * BED_H + sp.y;
+  return { x: sp.x, y, s: sp.s, lean: sp.lean, bloom: bloomOf({ ...sp, y }) };
+}
+
+// One flower, standing at its spot. New ones sprout and grow into place.
+function flowerAt(p, spot, isNew, delayS) {
+  const f = flowerById(p.k);
+  const w = FW * spot.s;
+  const h = FH * spot.s;
+  const x = spot.x - w / 2;
+  const y = spot.y - (h * 118) / 120;
+  const delay = isNew ? ` style="animation-delay:${delayS.toFixed(2)}s"` : "";
+  const sprout = isNew
+    ? `<g class="sprout-tip"${delay}><path d="M${spot.x},${spot.y} q-1,-6 0,-11" fill="none" stroke="#3d8a37" stroke-width="2.6" stroke-linecap="round"/><ellipse cx="${(spot.x - 3).toFixed(1)}" cy="${(spot.y - 8).toFixed(1)}" rx="3.6" ry="1.8" fill="#5aab48" transform="rotate(-30 ${(spot.x - 3).toFixed(1)} ${(spot.y - 8).toFixed(1)})"/><ellipse cx="${(spot.x + 3).toFixed(1)}" cy="${(spot.y - 10).toFixed(1)}" rx="3.6" ry="1.8" fill="#5aab48" transform="rotate(30 ${(spot.x + 3).toFixed(1)} ${(spot.y - 10).toFixed(1)})"/></g>`
+    : "";
+  const b = spot.bloom || bloomOf(spot);
+  return `<g class="item flower" data-i="${p.i}" data-name="${f ? f.name : "Flower"}" data-bloom="${b.cx.toFixed(1)},${b.cy.toFixed(1)},${b.r.toFixed(1)}">` +
+    `<ellipse cx="${spot.x}" cy="${spot.y + 1}" rx="${(11 * spot.s).toFixed(1)}" ry="3.4" fill="#8a5c36" opacity=".55"/>` +
+    `<g transform="rotate(${spot.lean} ${spot.x} ${spot.y})">${sprout}<g class="${isNew ? "grow" : ""}"${delay}><use href="#fl-${p.k}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/></g></g></g>`;
+}
+
+// The ground of one bed: a dug bed with soft, wavy edges on the lawn.
+function wavy(rng, x0, x1, y, amp) {
+  const pts = [];
+  for (let x = x0; x <= x1 + 0.1; x += (x1 - x0) / 8) pts.push([x, y + (rng() * 2 - 1) * amp]);
+  let d = `${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 1; i < pts.length; i++) {
+    const [px, py] = pts[i - 1];
+    const [x, yy] = pts[i];
+    d += ` Q${px.toFixed(1)},${py.toFixed(1)} ${((px + x) / 2).toFixed(1)},${((py + yy) / 2).toFixed(1)}`;
+  }
+  const [lx, ly] = pts[pts.length - 1];
+  return { d: `${d} L${lx.toFixed(1)},${ly.toFixed(1)}`, pts };
+}
+
+function bedGround(b, top) {
+  const rng = mulberry32(hashString(`bed-ground-${b}`));
+  const back = wavy(rng, 30, 330, top + 62, 5);
+  const front = wavy(rng, 30, 330, top + BED_H - 6, 3);
+  const rev = front.pts.slice().reverse();
+  let frontD = "";
+  for (let i = 1; i < rev.length; i++) {
+    const [px, py] = rev[i - 1];
+    const [x, y] = rev[i];
+    frontD += ` Q${px.toFixed(1)},${py.toFixed(1)} ${((px + x) / 2).toFixed(1)},${((py + y) / 2).toFixed(1)}`;
+  }
+  const bl = back.pts[0];
+  const br = back.pts[back.pts.length - 1];
+  const fr = front.pts[front.pts.length - 1];
+  const fl = front.pts[0];
+  // Round ends: curve from the back edge down to the front edge on each side.
+  const d = `M${back.d} C${(br[0] + 18).toFixed(1)},${br[1].toFixed(1)} ${(fr[0] + 18).toFixed(1)},${fr[1].toFixed(1)} ${fr[0].toFixed(1)},${fr[1].toFixed(1)}${frontD} L${fl[0].toFixed(1)},${fl[1].toFixed(1)} C${(fl[0] - 18).toFixed(1)},${fl[1].toFixed(1)} ${(bl[0] - 18).toFixed(1)},${bl[1].toFixed(1)} ${bl[0].toFixed(1)},${bl[1].toFixed(1)} Z`;
+  let s = `<path d="${d}" fill="#a8764b" stroke="#946440" stroke-width="7" stroke-linejoin="round"/>`;
+  s += `<path d="${d}" fill="none" stroke="#6e4a2c" stroke-width="1.6" stroke-linejoin="round"/>`;
+  // A few crumbs of soil, for texture.
+  for (let k = 0; k < 14; k++) {
+    s += `<ellipse cx="${(40 + rng() * 280).toFixed(1)}" cy="${(top + 78 + rng() * 76).toFixed(1)}" rx="${(2 + rng() * 2).toFixed(1)}" ry="1.2" fill="#8a5c36" opacity=".55"/>`;
+  }
+  return s;
+}
+
+// Flower beds: entries are { k, i } (i = place in the planted list).
 function bed(entries, top, highlightFrom) {
-  const rows = Math.max(1, Math.ceil(entries.length / PER_ROW));
+  const beds = Math.max(1, Math.ceil(entries.length / BED_SPOTS));
   let s = "";
   const stops = [];
-  for (let r = 0; r < rows; r++) {
-    const y = top + r * BED_ROW;
-    s += `<rect x="10" y="${y}" width="340" height="${BED_H}" rx="18" fill="#9a6b43" stroke="#6e4a2c" stroke-width="1.6"/>`;
-    s += `<rect x="16" y="${y + 5}" width="328" height="${BED_H - 10}" rx="14" fill="#a8764b"/>`;
-    stops.push(y + BED_H + 2);
+  for (let b = 0; b < beds; b++) {
+    s += bedGround(b, top + b * BED_H);
+    stops.push(top + (b + 1) * BED_H);
   }
   if (entries.length === 0) {
-    s += `<text x="180" y="${top + 40}" text-anchor="middle" font-size="17" font-weight="700" fill="#fff8ec">Your first flower grows here</text>`;
+    s += `<text x="180" y="${(top + 118).toFixed(1)}" text-anchor="middle" font-size="17" font-weight="700" fill="#fff8ec">Your first flower grows here</text>`;
   }
-  entries.forEach((p, slot) => {
-    const f = flowerById(p.k);
-    const { x, y, w, h } = flowerSpot(slot, top);
+  const placed = entries.map((p) => ({ p, spot: flowerSpot(p.i, top) }));
+  placed.sort((a, c) => a.spot.y - c.spot.y);
+  for (const { p, spot } of placed) {
     const isNew = p.i >= highlightFrom;
-    const cls = isNew ? "bloom" : "";
-    const delay = isNew ? `style="animation-delay:${(p.i - highlightFrom) * 0.35 + 0.2}s"` : "";
-    s += `<g class="item ${cls}" ${delay} data-i="${p.i}" data-name="${f ? f.name : "Flower"}"><use href="#fl-${p.k}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w}" height="${h}"/></g>`;
-  });
-  return { svg: s, height: rows * BED_ROW, stops };
+    s += flowerAt(p, spot, isNew, (p.i - highlightFrom) * 0.45 + 0.2);
+  }
+  return { svg: s, height: beds * BED_H, stops };
 }
 
 // The whole garden. Returns { svg, height, stops }.
@@ -335,9 +441,17 @@ export function gardenScene(garden, { highlightFrom = Infinity, newVisitors = []
 export const SKY_TRIM = 48;
 const STRIP_H = SC_ROW - 8;
 
+// Home strip: the newest four flowers, each at one of four scattered spots
+// chosen by its place in the planted list (so a flower keeps its spot for as
+// long as it is shown, and the newest one pops up in a different place each
+// time). [x offset in the bed, foot height above the bed's bottom, size, lean]
+const HOME_BED_H = 66;
+const HOME_SPOTS = [[29, 6, 1.0, -5], [88, 26, 0.9, 4], [146, 10, 1.04, -3], [205, 22, 0.94, 6]];
+const HOME_ORDER = [1, 3, 0, 2];
+
 function frontStrip(garden, top, { highlightFrom, sculpture, newPiece, sculptureName }) {
   const planted = garden.planted || [];
-  const per = sculpture ? 4 : PER_ROW;
+  const per = HOME_SPOTS.length;
   const newest = planted.map((p, i) => ({ k: p.k, i })).slice(-per);
   let s = `<defs>${flowerDefs(newest)}</defs>`;
   let bedX = 10;
@@ -347,28 +461,26 @@ function frontStrip(garden, top, { highlightFrom, sculpture, newPiece, sculpture
     const x = 18;
     const y = top + 2;
     const opts = { gold: it.gold, built: it.built, half: it.half, newPart: newPiece ? it.built - 1 : -1 };
-    s += `<g class="item" data-name="${sculptureName(it)}"><svg x="${x}" y="${y}" width="${SC_W}" height="${SC_H}" viewBox="0 0 100 120" class="building">${sculptureInner(it.sculpture.id, opts)}</svg>`;
-    s += `<rect x="${x + SC_W / 2 - 28}" y="${y + SC_H}" width="56" height="20" rx="10" fill="#fff8ec" stroke="#b9a98a"/>`;
-    s += `<text x="${x + SC_W / 2}" y="${y + SC_H + 15}" text-anchor="middle" font-size="14" font-weight="800" fill="#24502a">${piecesText(it.built, it.half)}</text></g>`;
+    s += `<g class="item" data-name="${sculptureName(it)}"><svg x="${x}" y="${y + 10}" width="${SC_W}" height="${SC_H}" viewBox="0 0 100 120" class="building">${sculptureInner(it.sculpture.id, opts)}</svg></g>`;
     bedX = 116;
   }
-  const bedY = top + STRIP_H - BED_H;
+  const bedY = top + STRIP_H - HOME_BED_H;
   const bedW = 350 - bedX;
-  s += `<rect x="${bedX}" y="${bedY}" width="${bedW}" height="${BED_H}" rx="18" fill="#9a6b43" stroke="#6e4a2c" stroke-width="1.6"/>`;
-  s += `<rect x="${bedX + 6}" y="${bedY + 5}" width="${bedW - 12}" height="${BED_H - 10}" rx="14" fill="#a8764b"/>`;
+  s += `<rect x="${bedX}" y="${bedY}" width="${bedW}" height="${HOME_BED_H}" rx="18" fill="#9a6b43" stroke="#6e4a2c" stroke-width="1.6"/>`;
+  s += `<rect x="${bedX + 6}" y="${bedY + 5}" width="${bedW - 12}" height="${HOME_BED_H - 10}" rx="14" fill="#a8764b"/>`;
   if (newest.length === 0) {
     s += `<text x="${bedX + bedW / 2}" y="${bedY + 39}" text-anchor="middle" font-size="16" font-weight="700" fill="#fff8ec">Your first flower grows here</text>`;
   }
-  const step = (bedW - 8) / per;
-  newest.forEach((p, slot) => {
-    const f = flowerById(p.k);
-    const x = bedX + 4 + slot * step + (step - FW) / 2;
-    const y = bedY - 4;
-    const isNew = p.i >= highlightFrom;
-    const cls = isNew ? "bloom" : "";
-    const delay = isNew ? `style="animation-delay:${(p.i - highlightFrom) * 0.35 + 0.2}s"` : "";
-    s += `<g class="item ${cls}" ${delay} data-i="${p.i}" data-name="${f ? f.name : "Flower"}"><use href="#fl-${p.k}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${FW}" height="${FH}"/></g>`;
+  const scale = bedW / 234;
+  const placed = newest.map((p) => {
+    const [dx, up, sz, lean] = HOME_SPOTS[HOME_ORDER[p.i % per]];
+    return { p, spot: { x: Math.round((bedX + dx * scale) * 10) / 10, y: bedY + HOME_BED_H - 4 - up, s: sz, lean } };
   });
+  placed.sort((a, c) => a.spot.y - c.spot.y);
+  for (const { p, spot } of placed) {
+    const isNew = p.i >= highlightFrom;
+    s += flowerAt(p, spot, isNew, (p.i - highlightFrom) * 0.45 + 0.2);
+  }
   return s;
 }
 
@@ -462,120 +574,260 @@ export function chestSVG(open) {
 }
 
 // ---- Garden sculptures ------------------------------------------------------
-// Each is six parts drawn bottom-up in a 100 x 120 box. Only the parts already
-// carved are drawn: nothing shows what is still to come, so each one is a
-// surprise until it is finished. A half piece is a rough, uncarved block where
-// the next part will go; a sculpture not yet begun is a plain stone.
+// Drawn in a 100 x 120 box, from the ground (y 116) up, one piece at a time in
+// the order js/logic/sculpture.js gives. Only the pieces already in place are
+// drawn: nothing shows what is still to come. Every piece rests on pieces
+// already finished, so each stage can stand.
+//
+// A half piece of stone is the lower half of that piece as a rough block (a
+// shorter course), never a left or right half. A half piece of a plant is a
+// smaller sprout or closed buds. A half piece of a creature shows nothing of
+// it: something small is set out instead (seeds, a shape under a cloth).
+// Creatures (alive or statues) are drawn whole, in one piece, inside a
+// <g class="sc-creature">, so a test can check no stage shows part of one.
+// A sculpture not yet begun is a plain uncarved stone on the ground.
 
 const STONE = { s: "#dcd6c8", l: "#efebe2", d: "#c5bdab", e: "#7d7566", a: "#c08a3e", al: "#f0d9a6", ae: "#7a5418" };
 const GOLD = { s: "#ffd65a", l: "#fff0a8", d: "#f0b830", e: "#a87a08", a: "#e89a00", al: "#fff6c8", ae: "#8a5a00" };
 const W = `stroke-width="2" stroke-linejoin="round"`;
 const R = (x, y, w, h, fill, edge, rx = 2) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${fill}" stroke="${edge}" ${W}/>`;
 const P = (d, fill, edge) => `<path d="${d}" fill="${fill}" stroke="${edge}" ${W}/>`;
+const GROUND = 116;
 
+// Stone pieces. box: [x0, y0, x1, y1], one box per separate block.
+function slab(x0, y0, x1, y1, p) {
+  return R(x0, y0, x1 - x0, y1 - y0, p.s, p.e, 3) + `<rect x="${x0 + 4}" y="${y0 + 2}" width="${x1 - x0 - 8}" height="2.6" rx="1.3" fill="${p.l}"/>`;
+}
+function drum(x0, y0, x1, y1, p) {
+  const w = x1 - x0;
+  let flutes = "";
+  for (let k = 1; k < 4; k++) {
+    const x = (x0 + (w * k) / 4).toFixed(1);
+    flutes += `M${x},${y0 + 2.5} L${x},${y1 - 1.5} `;
+  }
+  return R(x0, y0, w, y1 - y0, p.s, p.e, 1) + `<path d="${flutes}" stroke="${p.e}" stroke-width="1.1" opacity=".45"/>` + `<rect x="${x0 + 1.5}" y="${y0 + 1}" width="${w - 3}" height="2" fill="${p.l}"/>`;
+}
 function stdBase(p) {
-  return R(16, 103, 68, 13, p.s, p.e, 3) + `<rect x="20" y="105" width="60" height="3" rx="1.5" fill="${p.l}"/>`;
+  return { box: [[16, 104, 84, 116]], draw: slab(16, 104, 84, 116, p) };
 }
 function stdPedestal(p) {
-  return P("M30,103 L33,91 L67,91 L70,103 Z", p.s, p.e) + R(27, 86, 46, 6, p.l, p.e);
+  return { box: [[27, 89, 73, 104]], draw: P("M30,104 L33,94 L67,94 L70,104 Z", p.s, p.e) + R(27, 89, 46, 6, p.l, p.e) };
 }
-function rose(x, y) {
-  return `<circle cx="${x}" cy="${y}" r="4.6" fill="#e0315f" stroke="#9e1838" stroke-width="1.4"/><circle cx="${x - 0.8}" cy="${y - 0.8}" r="1.8" fill="#ff7d9c"/>`;
+const drumPiece = (x0, y0, x1, y1, p) => ({ box: [[x0, y0, x1, y1]], draw: drum(x0, y0, x1, y1, p) });
+
+// Plants keep their own colours, also in the gold round.
+const STEM = "#3d8a37";
+const LEAF = "#5aab48";
+const LEAF_E = "#2f6e28";
+const f1 = (v) => v.toFixed(1);
+const leaf = (x, y, len, ang) => `<ellipse cx="${f1(x)}" cy="${f1(y)}" rx="${f1(len / 2)}" ry="${f1(len / 4.6)}" fill="${LEAF}" stroke="${LEAF_E}" stroke-width="0.9" transform="rotate(${ang} ${f1(x)} ${f1(y)})"/>`;
+const stalk = (x, top, bend = 0) => `<path d="M${x},${GROUND} Q${x + bend},${f1((GROUND + top) / 2)} ${x},${top}" fill="none" stroke="${STEM}" stroke-width="1.8" stroke-linecap="round"/>`;
+function shoot(x, h) {
+  return stalk(x, GROUND - h, -1) + leaf(x - h * 0.28, GROUND - h * 0.55, h * 0.62, -38) + leaf(x + h * 0.28, GROUND - h * 0.75, h * 0.62, 38);
+}
+function blossom(x, y, r, color, center, edge) {
+  let s = "";
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+    s += `<circle cx="${f1(x + Math.cos(a) * r * 0.62)}" cy="${f1(y + Math.sin(a) * r * 0.62)}" r="${f1(r * 0.5)}" fill="${color}" stroke="${edge}" stroke-width="0.8"/>`;
+  }
+  return s + `<circle cx="${x}" cy="${y}" r="${f1(r * 0.32)}" fill="${center}"/>`;
+}
+const bud = (x, y, color) => `<ellipse cx="${x}" cy="${y}" rx="2.3" ry="3.6" fill="${LEAF}" stroke="${LEAF_E}" stroke-width="0.9"/><path d="M${x - 1.2},${y - 2.6} Q${x},${y - 5} ${x + 1.2},${y - 2.6} Z" fill="${color}"/>`;
+
+// A clump at each foot of the sculpture, growing from the ground.
+const FEET = [[5, 10], [90, 95]];
+function footShoots(h) {
+  return FEET.map(([a, b]) => shoot(a, h) + shoot(b, h * 0.8)).join("");
+}
+function footBuds(color) {
+  return FEET.map(([a, b]) => stalk(a, 96, -2) + stalk(b, 100, 2) + leaf(a + 2, 108, 8, 35) + leaf(b - 2, 109, 8, -35) + bud(a, 96, color) + bud(b, 100, color)).join("");
+}
+function footBlooms(color, center, edge) {
+  return FEET.map(([a, b]) => stalk(a, 92, -2) + stalk(b, 97, 2) + leaf(a + 2, 107, 9, 35) + leaf(b - 2, 108, 9, -35) + blossom(a, 92, 6, color, center, edge) + blossom(b, 97, 5.4, color, center, edge)).join("");
+}
+function footPlant(kind) {
+  const c = { bells: ["#7c9bf0", "#fff3b0", "#3d5fb8"], daisies: ["#ffffff", "#f4b400", "#b9b09d"], clover: ["#f08cc0", "#d4568f", "#b8558a"] }[kind];
+  return {
+    sprout: { box: [[0, GROUND - 10, 100, GROUND]], draw: footShoots(10), half: footShoots(5.5), halfTop: GROUND - 6 },
+    bloom: { box: [[0, 86, 100, GROUND]], draw: footBlooms(...c), half: footBuds(c[0]), halfTop: 92 },
+  };
 }
 
-const SCULPTURE_PARTS = {
+// Under a cloth: a statue waiting to be set out. Shows nothing of it.
+function clothBundle(cx, bottom, w, h) {
+  const l = cx - w / 2;
+  const r = cx + w / 2;
+  const t = bottom - h;
+  return `<g class="sc-cloth"><path d="M${l},${bottom} Q${l + 1},${f1(t + h * 0.35)} ${cx},${t} Q${r - 1},${f1(t + h * 0.35)} ${r},${bottom} Q${cx + w / 4},${bottom - 3} ${cx},${bottom} Q${cx - w / 4},${bottom - 3} ${l},${bottom} Z" fill="#d9cbb0" stroke="#9c8a68" stroke-width="1.8" stroke-linejoin="round"/>` +
+    `<path d="M${f1(cx - w * 0.18)},${f1(t + h * 0.3)} Q${f1(cx - w * 0.24)},${f1(t + h * 0.7)} ${f1(cx - w * 0.28)},${bottom - 1} M${f1(cx + w * 0.18)},${f1(t + h * 0.3)} Q${f1(cx + w * 0.24)},${f1(t + h * 0.7)} ${f1(cx + w * 0.28)},${bottom - 1}" fill="none" stroke="#b7a483" stroke-width="1.3" stroke-linecap="round"/>` +
+    `<circle cx="${cx}" cy="${t + 1}" r="2.4" fill="#c9443f" stroke="#8a1f19" stroke-width="1"/></g>`;
+}
+
+// Each sculpture: piece id -> { box, draw, half, halfTop }. A piece with no
+// half drawing shows the lower half of its bottom blocks as rough stone.
+const SC_ART = {
   sundial: (p) => {
     let ticks = "";
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2;
-      const c = Math.cos(a);
-      const n = Math.sin(a);
-      ticks += `<line x1="${(50 + c * 19).toFixed(1)}" y1="${(35 + n * 3.6).toFixed(1)}" x2="${(50 + c * 24).toFixed(1)}" y2="${(35 + n * 4.6).toFixed(1)}" stroke="${p.ae}" stroke-width="1.6" stroke-linecap="round"/>`;
+      ticks += `<line x1="${f1(50 + Math.cos(a) * 21)}" y1="${f1(37 + Math.sin(a) * 4)}" x2="${f1(50 + Math.cos(a) * 26)}" y2="${f1(37 + Math.sin(a) * 5)}" stroke="${p.ae}" stroke-width="1.6" stroke-linecap="round"/>`;
     }
-    let rays = "";
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      rays += `<line x1="${(20 + Math.cos(a) * 8).toFixed(1)}" y1="${(14 + Math.sin(a) * 8).toFixed(1)}" x2="${(20 + Math.cos(a) * 12).toFixed(1)}" y2="${(14 + Math.sin(a) * 12).toFixed(1)}" stroke="#f5b82e" stroke-width="2.4" stroke-linecap="round"/>`;
-    }
-    return [
-      stdBase(p),
-      stdPedestal(p),
-      R(41, 46, 18, 40, p.s, p.e, 1) + `<path d="M46,50 L46,82 M50,50 L50,82 M54,50 L54,82" stroke="${p.e}" stroke-width="1.2" opacity=".55"/>` + R(35, 40, 30, 7, p.l, p.e),
-      `<ellipse cx="50" cy="36" rx="32" ry="8" fill="${p.a}" stroke="${p.ae}" ${W}/><ellipse cx="50" cy="35" rx="26" ry="5.4" fill="${p.al}"/>`,
-      P("M50,35 L50,11 L69,34 Z", p.a, p.ae),
-      ticks + rays + `<circle cx="20" cy="14" r="6" fill="#ffd23f" stroke="#e8a800" stroke-width="1.5"/>`,
-    ];
+    return {
+      base: stdBase(p),
+      pedestal: stdPedestal(p),
+      "drum-1": drumPiece(40, 76, 60, 89, p),
+      "drum-2": drumPiece(40, 63, 60, 76, p),
+      "drum-3": drumPiece(40, 50, 60, 63, p),
+      capital: { box: [[33, 43, 67, 50]], draw: P("M36,50 L33,43 L67,43 L64,50 Z", p.l, p.e) },
+      dial: { box: [[18, 30, 82, 43]], draw: `<ellipse cx="50" cy="37" rx="32" ry="7.5" fill="${p.a}" stroke="${p.ae}" ${W}/><ellipse cx="50" cy="36" rx="26" ry="5" fill="${p.al}"/>` + ticks },
+      pointer: { box: [[50, 14, 69, 37]], draw: P("M50,37 L50,14 L69,36 Z", p.a, p.ae) },
+    };
   },
-  birdbath: (p) => [
-    stdBase(p),
-    stdPedestal(p),
-    P("M43,86 C38,72 47,64 45,52 L55,52 C53,64 62,72 57,86 Z", p.s, p.e),
-    P("M14,41 L86,41 Q84,57 50,59 Q16,57 14,41 Z", p.s, p.e) + R(11, 37, 78, 6, p.l, p.e, 3),
-    `<ellipse cx="50" cy="39" rx="34" ry="3" fill="#7cc6f2" stroke="#3d86b8" stroke-width="1.5"/><path d="M30,38.6 L42,38.6" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>`,
-    `<path d="M67,37 L66,34 M73,37 L73,34" stroke="#7a4a2a" stroke-width="1.6" stroke-linecap="round"/>` +
-      P("M62,29 L51,24 L56,33 Z", "#3f6fb8", "#2f4f86") +
-      `<ellipse cx="69" cy="29" rx="10" ry="6.5" fill="#5b86c9" stroke="#2f4f86" stroke-width="1.6"/><ellipse cx="71" cy="31" rx="5.5" ry="3.6" fill="#ffb38a"/>` +
-      `<circle cx="78" cy="22" r="5.4" fill="#5b86c9" stroke="#2f4f86" stroke-width="1.6"/>` +
-      P("M83,21 L89,22.6 L83,24.6 Z", "#f2a23a", "#b8701a") + `<circle cx="79.4" cy="21" r="1.3" fill="#1d1d1d"/>`,
-  ],
-  owl: (p) => [
-    stdBase(p),
-    stdPedestal(p),
-    `<ellipse cx="50" cy="66" rx="20" ry="22" fill="${p.s}" stroke="${p.e}" ${W}/><ellipse cx="50" cy="71" rx="12" ry="14" fill="${p.l}"/>` +
-      `<path d="M45,64 q2.5,3 5,0 q2.5,3 5,0 M42,71 q2.5,3 5,0 q2.5,3 5,0 q2.5,3 5,0 M45,78 q2.5,3 5,0 q2.5,3 5,0" fill="none" stroke="${p.e}" stroke-width="1.3" opacity=".6"/>` +
-      `<path d="M42,88 l3,-4 l3,4 M52,88 l3,-4 l3,4" fill="none" stroke="${p.ae}" stroke-width="2" stroke-linecap="round"/>`,
-    P("M31,56 Q20,72 33,87 Q41,73 37,56 Z", p.d, p.e) + P("M69,56 Q80,72 67,87 Q59,73 63,56 Z", p.d, p.e),
-    P("M30,31 L33,12 L42,21 Q50,18 58,21 L67,12 L70,31 Q72,49 50,51 Q28,49 30,31 Z", p.s, p.e) + `<ellipse cx="50" cy="35" rx="16" ry="12" fill="${p.l}"/>`,
-    `<circle cx="42" cy="33" r="6.5" fill="#f2b33d" stroke="${p.e}" stroke-width="1.6"/><circle cx="58" cy="33" r="6.5" fill="#f2b33d" stroke="${p.e}" stroke-width="1.6"/>` +
-      `<circle cx="42" cy="33.5" r="3.2" fill="#2b2118"/><circle cx="58" cy="33.5" r="3.2" fill="#2b2118"/><circle cx="43.2" cy="32" r="1.2" fill="#fff"/><circle cx="59.2" cy="32" r="1.2" fill="#fff"/>` +
-      P("M47,39 L53,39 L50,45 Z", p.a, p.ae),
-  ],
-  fountain: (p) => [
-    P("M8,96 L92,96 L86,116 L14,116 Z", p.s, p.e) + R(5, 91, 90, 6, p.l, p.e, 3),
-    R(44, 64, 12, 28, p.s, p.e, 1) + R(40, 84, 20, 6, p.l, p.e),
-    P("M22,62 L78,62 Q76,74 50,76 Q24,74 22,62 Z", p.s, p.e) + R(20, 58, 60, 5, p.l, p.e, 2.5),
-    R(46, 40, 8, 19, p.s, p.e, 1) + P("M34,39 L66,39 Q64,48 50,49 Q36,48 34,39 Z", p.s, p.e) + R(32, 35, 36, 5, p.l, p.e, 2.5),
-    `<circle cx="50" cy="29" r="6" fill="${p.l}" stroke="${p.e}" ${W}/>` + P("M50,23 L47,17 L50,10 L53,17 Z", p.a, p.ae),
-    `<g fill="none" stroke="#4fa3f0" stroke-width="2.6" stroke-linecap="round"><path d="M50,22 Q40,17 35,34"/><path d="M50,22 Q60,17 65,34"/><path d="M33,40 Q24,45 22,56"/><path d="M67,40 Q76,45 78,56"/><path d="M21,64 Q12,73 10,89"/><path d="M79,64 Q88,73 90,89"/></g>` +
-      `<ellipse cx="50" cy="92.5" rx="40" ry="2.4" fill="#7cc6f2"/><ellipse cx="50" cy="59.5" rx="26" ry="1.8" fill="#7cc6f2"/><ellipse cx="50" cy="36.5" rx="15" ry="1.5" fill="#7cc6f2"/>`,
-  ],
-  arch: (p) => [
-    R(12, 104, 24, 12, p.s, p.e) + R(64, 104, 24, 12, p.s, p.e),
-    R(16, 56, 16, 48, p.s, p.e, 1) + R(68, 56, 16, 48, p.s, p.e, 1) + `<path d="M16,72 L32,72 M16,88 L32,88 M68,72 L84,72 M68,88 L84,88" stroke="${p.e}" stroke-width="1.3" opacity=".55"/>`,
-    P("M16,56 A34,34 0 0,1 50,22 L50,38 A18,18 0 0,0 32,56 Z", p.s, p.e),
-    P("M50,22 A34,34 0 0,1 84,56 L68,56 A18,18 0 0,0 50,38 Z", p.s, p.e),
-    P("M44,18 L56,18 L54,40 L46,40 Z", p.a, p.ae),
-    `<path d="M24,104 L24,58 A26,26 0 0,1 76,58 L76,104" fill="none" stroke="#3d8a37" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="9 5"/>` +
-      `<ellipse cx="20" cy="82" rx="5" ry="2.6" fill="#5aab48"/><ellipse cx="80" cy="70" rx="5" ry="2.6" fill="#5aab48"/><ellipse cx="36" cy="34" rx="5" ry="2.6" fill="#5aab48" transform="rotate(-35 36 34)"/>` +
-      rose(24, 96) + rose(24, 70) + rose(27.5, 43) + rose(41, 31.6) + rose(59, 31.6) + rose(72.5, 43) + rose(76, 82) + rose(76, 100),
-  ],
-  rabbit: (p) => [
-    stdBase(p),
-    R(18, 88, 64, 15, p.s, p.e) + `<rect x="21" y="90" width="58" height="3" rx="1.5" fill="${p.l}"/>`,
-    `<ellipse cx="54" cy="72" rx="24" ry="17" fill="${p.s}" stroke="${p.e}" ${W}/><ellipse cx="46" cy="76" rx="11" ry="10" fill="${p.l}"/>` +
-      `<circle cx="78" cy="76" r="6" fill="${p.l}" stroke="${p.e}" stroke-width="1.6"/>` +
-      `<ellipse cx="38" cy="86" rx="7" ry="3.4" fill="${p.l}" stroke="${p.e}" stroke-width="1.6"/><ellipse cx="54" cy="86.5" rx="7" ry="3.4" fill="${p.l}" stroke="${p.e}" stroke-width="1.6"/>`,
-    `<circle cx="40" cy="48" r="14" fill="${p.s}" stroke="${p.e}" ${W}/><ellipse cx="38" cy="53" rx="7" ry="5" fill="${p.l}"/>` +
-      `<circle cx="34.5" cy="45" r="2" fill="${p.e}"/><circle cx="45" cy="45" r="2" fill="${p.e}"/>` +
-      `<path d="M37.5,51 L42,51 L39.75,53.6 Z" fill="${p.a}" stroke="${p.ae}" stroke-width="1"/><path d="M39.75,53.6 Q37,57 34.5,55.5 M39.75,53.6 Q42.5,57 45,55.5" fill="none" stroke="${p.e}" stroke-width="1.2" stroke-linecap="round"/>`,
-    `<ellipse cx="33" cy="21" rx="5.4" ry="15" fill="${p.s}" stroke="${p.e}" ${W} transform="rotate(-12 33 21)"/><ellipse cx="33" cy="22" rx="2.4" ry="10" fill="${p.l}" transform="rotate(-12 33 21)"/>` +
-      `<ellipse cx="48" cy="21" rx="5.4" ry="15" fill="${p.s}" stroke="${p.e}" ${W} transform="rotate(14 48 21)"/><ellipse cx="48" cy="22" rx="2.4" ry="10" fill="${p.l}" transform="rotate(14 48 21)"/>`,
-    [0, 1, 2, 3, 4].map((i) => {
-      const x = 28 + i * 6;
-      const c = ["#ff8fb3", "#ffd23f", "#c79ae8", "#ffd23f", "#ff8fb3"][i];
-      return `<circle cx="${x}" cy="${(36 - Math.sin((i / 4) * Math.PI) * 2.5).toFixed(1)}" r="3.2" fill="${c}" stroke="#a8506e" stroke-width="0.9"/>`;
-    }).join("") + `<path d="M26,37 Q40,31 54,37" fill="none" stroke="#3d8a37" stroke-width="1.6"/>`,
-  ],
-};
-
-// Where each part goes, as a rough block: [centre x, bottom y, width, height].
-const ROUGH = {
-  sundial: [[50, 116, 64, 13], [50, 103, 44, 17], [50, 86, 24, 40], [50, 44, 60, 12], [57, 34, 18, 22], [22, 26, 22, 22]],
-  birdbath: [[50, 116, 64, 13], [50, 103, 44, 17], [50, 86, 16, 34], [50, 59, 72, 22], [50, 42, 62, 6], [70, 38, 28, 18]],
-  owl: [[50, 116, 64, 13], [50, 103, 44, 17], [50, 88, 40, 44], [50, 87, 56, 30], [50, 51, 40, 38], [50, 42, 28, 14]],
-  fountain: [[50, 116, 86, 25], [50, 92, 18, 28], [50, 76, 58, 18], [50, 59, 36, 20], [50, 35, 14, 24], [50, 30, 30, 14]],
-  arch: [[50, 116, 76, 12], [50, 104, 68, 48], [33, 56, 34, 34], [67, 56, 34, 34], [50, 40, 12, 22], [50, 104, 60, 16]],
-  rabbit: [[50, 116, 64, 13], [50, 103, 62, 15], [55, 88, 50, 34], [40, 62, 28, 28], [40, 36, 26, 30], [40, 40, 30, 10]],
+  birdbath: (p) => ({
+    base: stdBase(p),
+    "drum-1": { box: [[38, 92, 62, 104]], draw: P("M38,104 C41,99 45,97 45,92 L55,92 C55,97 59,99 62,104 Z", p.s, p.e) + `<rect x="44" y="93" width="12" height="2" fill="${p.l}"/>` },
+    "drum-2": drumPiece(45, 79, 55, 92, p),
+    "drum-3": { box: [[37, 66, 63, 79]], draw: P("M45,79 L55,79 C55,73 60,70 63,66 L37,66 C40,70 45,73 45,79 Z", p.s, p.e) },
+    // Half: the underside of the bowl, roughed out, resting on the stem.
+    bowl: { box: [[11, 44, 89, 67]], draw: P("M14,48 L86,48 Q84,64 50,67 Q16,64 14,48 Z", p.s, p.e) + R(11, 44, 78, 6, p.l, p.e, 3), half: roughBlock(50, 67, 44, 10, STONE), halfTop: 57 },
+    water: {
+      box: [[16, 44, 84, 48]],
+      draw: `<ellipse cx="50" cy="46.5" rx="35" ry="2.6" fill="#7cc6f2" stroke="#3d86b8" stroke-width="1.5"/><path d="M28,46 L42,46" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>`,
+      half: `<ellipse cx="50" cy="47" rx="18" ry="1.6" fill="#7cc6f2" stroke="#3d86b8" stroke-width="1.2"/>`,
+      halfTop: 45,
+    },
+    "bells-sprout": footPlant("bells").sprout,
+    "bells-bloom": footPlant("bells").bloom,
+    bluebird: {
+      box: [[51, 23, 90, 44]],
+      // Standing on the rim of the bowl, facing out.
+      draw: `<path d="M67,44 L66,40 M73,44 L73,40" stroke="#7a4a2a" stroke-width="1.6" stroke-linecap="round"/>` +
+        P("M62,36 L51,31 L56,40 Z", "#3f6fb8", "#2f4f86") +
+        `<ellipse cx="69" cy="36" rx="10" ry="6.5" fill="#5b86c9" stroke="#2f4f86" stroke-width="1.6"/><ellipse cx="71" cy="38" rx="5.5" ry="3.6" fill="#ffb38a"/>` +
+        `<path d="M63,34 Q68,31 73,35" fill="none" stroke="#2f4f86" stroke-width="1.3"/>` +
+        `<circle cx="78" cy="29" r="5.4" fill="#5b86c9" stroke="#2f4f86" stroke-width="1.6"/>` +
+        P("M83,28 L89,29.6 L83,31.6 Z", "#f2a23a", "#b8701a") + `<circle cx="79.4" cy="28" r="1.3" fill="#1d1d1d"/>`,
+      // Seeds set out on the rim, waiting for someone.
+      half: [[62, 43.4], [66, 43.1], [69.5, 43.5], [73, 43.2], [76.5, 43.5], [67.5, 42.2], [72, 42.3]]
+        .map(([x, y]) => `<ellipse cx="${x}" cy="${y}" rx="1.5" ry="1" fill="#a8763e" stroke="#6e4a2c" stroke-width="0.6"/>`).join(""),
+      halfTop: 41,
+    },
+  }),
+  owl: (p) => ({
+    base: stdBase(p),
+    plinth: stdPedestal(p),
+    "drum-1": drumPiece(40, 77, 60, 89, p),
+    "drum-2": drumPiece(40, 65, 60, 77, p),
+    "drum-3": { box: [[40, 56, 60, 65], [34, 51, 66, 56]], draw: drum(40, 56, 60, 65, p) + R(34, 51, 32, 5, p.l, p.e) },
+    "daisies-sprout": footPlant("daisies").sprout,
+    "daisies-bloom": footPlant("daisies").bloom,
+    owl: {
+      box: [[30, 7, 70, 52]],
+      // The whole stone owl, sitting on the top of the column.
+      draw: `<ellipse cx="50" cy="37" rx="16" ry="15" fill="${p.s}" stroke="${p.e}" ${W}/><ellipse cx="50" cy="41" rx="10" ry="10" fill="${p.l}"/>` +
+        `<path d="M46,38 q2,2.4 4,0 q2,2.4 4,0 M44,43 q2,2.4 4,0 q2,2.4 4,0 q2,2.4 4,0" fill="none" stroke="${p.e}" stroke-width="1.2" opacity=".55"/>` +
+        P("M35,29 Q27,40 37,50 Q41,40 39,29 Z", p.d, p.e) + P("M65,29 Q73,40 63,50 Q59,40 61,29 Z", p.d, p.e) +
+        `<path d="M43,52 l2.5,-3.5 l2.5,3.5 M52,52 l2.5,-3.5 l2.5,3.5" fill="none" stroke="${p.ae}" stroke-width="1.8" stroke-linecap="round"/>` +
+        P("M36,21 L38,7 L45,14 Q50,12 55,14 L62,7 L64,21 Q66,33 50,34 Q34,33 36,21 Z", p.s, p.e) + `<ellipse cx="50" cy="23" rx="12" ry="8.5" fill="${p.l}"/>` +
+        `<circle cx="44.5" cy="22.5" r="4.8" fill="#f2b33d" stroke="${p.e}" stroke-width="1.4"/><circle cx="55.5" cy="22.5" r="4.8" fill="#f2b33d" stroke="${p.e}" stroke-width="1.4"/>` +
+        `<circle cx="44.5" cy="23" r="2.4" fill="#2b2118"/><circle cx="55.5" cy="23" r="2.4" fill="#2b2118"/><circle cx="45.4" cy="22" r="0.9" fill="#fff"/><circle cx="56.4" cy="22" r="0.9" fill="#fff"/>` +
+        P("M48,27 L52,27 L50,31 Z", p.a, p.ae),
+      half: clothBundle(50, 51, 22, 17),
+      halfTop: 34,
+    },
+  }),
+  fountain: (p) => ({
+    basin: { box: [[5, 93, 95, 116]], draw: P("M8,98 L92,98 L86,116 L14,116 Z", p.s, p.e) + R(5, 93, 90, 6, p.l, p.e, 3) },
+    "drum-1": drumPiece(44, 84, 56, 94, p),
+    "drum-2": drumPiece(44, 76, 56, 84, p),
+    "drum-3": drumPiece(44, 68, 56, 76, p),
+    "lower-bowl": { box: [[20, 52, 80, 69]], draw: P("M22,57 L78,57 Q76,68 50,69 Q24,68 22,57 Z", p.s, p.e) + R(20, 52, 60, 5, p.l, p.e, 2.5), half: roughBlock(50, 69, 34, 8, STONE), halfTop: 61 },
+    "top-bowl": { box: [[46, 44, 54, 53], [32, 33, 68, 46]], draw: R(46, 44, 8, 9, p.s, p.e, 1) + P("M34,37 L66,37 Q64,45 50,46 Q36,45 34,37 Z", p.s, p.e) + R(32, 33, 36, 5, p.l, p.e, 2.5) },
+    finial: { box: [[44, 11, 56, 33]], draw: `<circle cx="50" cy="28" r="5.2" fill="${p.l}" stroke="${p.e}" ${W}/>` + P("M50,23 L47,17 L50,11 L53,17 Z", p.a, p.ae) },
+    water: {
+      box: [[8, 18, 92, 96]],
+      draw: `<g fill="none" stroke="#4fa3f0" stroke-width="2.6" stroke-linecap="round"><path d="M50,20 Q41,15 36,32"/><path d="M50,20 Q59,15 64,32"/><path d="M33,38 Q24,43 22,52"/><path d="M67,38 Q76,43 78,52"/><path d="M21,58 Q12,68 11,91"/><path d="M79,58 Q88,68 89,91"/></g>` +
+        `<ellipse cx="50" cy="95" rx="40" ry="2.4" fill="#7cc6f2"/><ellipse cx="50" cy="54.5" rx="26" ry="1.8" fill="#7cc6f2"/><ellipse cx="50" cy="35" rx="15" ry="1.5" fill="#7cc6f2"/>`,
+      // Half: the basin fills first.
+      half: `<ellipse cx="50" cy="95.5" rx="38" ry="2" fill="#7cc6f2"/>`,
+      halfTop: 93,
+    },
+  }),
+  arch: (p) => {
+    const course = (y0, y1) => ({
+      box: [[16, y0, 32, y1], [68, y0, 84, y1]],
+      draw: R(16, y0, 16, y1 - y0, p.s, p.e, 1) + R(68, y0, 16, y1 - y0, p.s, p.e, 1) + `<rect x="17.5" y="${y0 + 1}" width="13" height="2" fill="${p.l}"/><rect x="69.5" y="${y0 + 1}" width="13" height="2" fill="${p.l}"/>`,
+    });
+    // The ring from 180 to 140 degrees on each side stands on the pillars;
+    // the top of the ring with the keystone then closes it.
+    const pt = (r, deg) => `${(50 + r * Math.cos((deg * Math.PI) / 180)).toFixed(2)},${(58 - r * Math.sin((deg * Math.PI) / 180)).toFixed(2)}`;
+    const ring = (a0, a1) => {
+      const cw = a0 > a1 ? 1 : 0;
+      return `M${pt(34, a0)} A34,34 0 0,${cw} ${pt(34, a1)} L${pt(18, a1)} A18,18 0 0,${1 - cw} ${pt(18, a0)} Z`;
+    };
+    // A vine up the face of each pillar (x 24 and 76), then round the ring.
+    const vine = (upTo, overTop) => {
+      const left = `M24,${GROUND} L24,${upTo}` + (overTop ? ` A26,26 0 0,1 ${pt(26, 92)}` : "");
+      const right = `M76,${GROUND} L76,${upTo}` + (overTop ? ` A26,26 0 0,0 ${pt(26, 88)}` : "");
+      return `<path d="${left} ${right}" fill="none" stroke="${STEM}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+    };
+    const leaves = (list) => list.map(([x, y, a]) => leaf(x, y, 7, a)).join("");
+    const lowLeaves = [[21, 104, -30], [27, 94, 30], [21, 84, -30], [79, 104, 30], [73, 94, -30], [79, 84, 30]];
+    const highLeaves = [[27, 72, 30], [21, 62, -30], [73, 72, -30], [79, 62, 30], [24.5, 46, -60], [31, 37, -30], [42, 32, -10], [58, 32, 10], [69, 37, 30], [75.5, 46, 60]];
+    const roses = [[24, 98], [24, 74], [26.6, 48], [36, 36.6], [50, 32], [64, 36.6], [73.4, 48], [76, 86], [76, 62]];
+    return {
+      footings: { box: [[12, 106, 36, 116], [64, 106, 88, 116]], draw: slab(12, 106, 36, 116, p) + slab(64, 106, 88, 116, p) },
+      "pillars-1": course(90, 106),
+      "pillars-2": course(74, 90),
+      "pillars-3": course(58, 74),
+      springers: { box: [[16, 36, 36, 58], [64, 36, 84, 58]], draw: P(ring(180, 140), p.s, p.e) + P(ring(0, 40), p.s, p.e) },
+      keystone: {
+        box: [[24, 23, 76, 47]],
+        draw: P(ring(140, 40), p.s, p.e) + P("M44.5,23.2 L55.5,23.2 L53.6,40.6 L46.4,40.6 Z", p.a, p.ae),
+        // Half: the wooden frame builders stand under an arch before the top
+        // stones go on. It stands on the ground; the stones come next.
+        half: `<g class="sc-frame" fill="none" stroke-linecap="round"><path d="M35.5,${GROUND} L35.5,60 M64.5,${GROUND} L64.5,60 M35.5,62 L64.5,62 M35.5,${GROUND - 2} L64.5,62 M64.5,${GROUND - 2} L35.5,62" stroke="#8a5a33" stroke-width="3"/>` +
+          `<path d="M33,59 A17,17 0 0,1 67,59" stroke="#a0703f" stroke-width="4"/><path d="M33,59 A17,17 0 0,1 67,59" stroke="#6e4a2c" stroke-width="1" opacity=".6"/></g>`,
+        halfTop: 40,
+      },
+      "roses-sprout": { box: [[18, 104, 82, GROUND]], draw: shoot(24, 11) + shoot(76, 11), half: shoot(24, 6) + shoot(76, 6), halfTop: 109 },
+      "roses-climb": {
+        box: [[18, 28, 82, GROUND]],
+        draw: vine(58, true) + leaves(lowLeaves) + leaves(highLeaves),
+        half: vine(80, false) + leaves(lowLeaves),
+        halfTop: 78,
+      },
+      "roses-bloom": {
+        box: [[18, 27, 82, GROUND]],
+        draw: roses.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="4.6" fill="#e0315f" stroke="#9e1838" stroke-width="1.4"/><circle cx="${x - 0.8}" cy="${y - 0.8}" r="1.8" fill="#ff7d9c"/>`).join(""),
+        half: roses.map(([x, y]) => bud(x, y + 1, "#e0315f")).join(""),
+        halfTop: 30,
+      },
+    };
+  },
+  rabbit: (p) => ({
+    base: stdBase(p),
+    "step-1": { box: [[20, 96, 80, 104]], draw: slab(20, 96, 80, 104, p) },
+    "step-2": { box: [[26, 88, 74, 96]], draw: slab(26, 88, 74, 96, p) },
+    "clover-sprout": footPlant("clover").sprout,
+    "clover-bloom": footPlant("clover").bloom,
+    rabbit: {
+      box: [[24, 15, 84, 89]],
+      // The whole stone rabbit, sitting on the top step.
+      draw: `<ellipse cx="57" cy="75" rx="21" ry="13.5" fill="${p.s}" stroke="${p.e}" ${W}/><ellipse cx="65" cy="78" rx="10" ry="8.5" fill="${p.l}" opacity=".7"/>` +
+        `<circle cx="78" cy="76" r="5.4" fill="${p.l}" stroke="${p.e}" stroke-width="1.6"/>` +
+        `<ellipse cx="43" cy="75" rx="9" ry="10" fill="${p.l}" stroke="${p.e}" stroke-width="1.4"/>` +
+        `<ellipse cx="41" cy="86.2" rx="6.5" ry="3" fill="${p.l}" stroke="${p.e}" stroke-width="1.5"/><ellipse cx="52" cy="86.5" rx="6.5" ry="3" fill="${p.l}" stroke="${p.e}" stroke-width="1.5"/>` +
+        `<ellipse cx="33" cy="31" rx="5.2" ry="14" fill="${p.s}" stroke="${p.e}" ${W} transform="rotate(-10 33 31)"/><ellipse cx="33" cy="32" rx="2.3" ry="9.5" fill="${p.l}" transform="rotate(-10 33 31)"/>` +
+        `<ellipse cx="45" cy="31" rx="5.2" ry="14" fill="${p.s}" stroke="${p.e}" ${W} transform="rotate(12 45 31)"/><ellipse cx="45" cy="32" rx="2.3" ry="9.5" fill="${p.l}" transform="rotate(12 45 31)"/>` +
+        `<circle cx="39" cy="55" r="12.5" fill="${p.s}" stroke="${p.e}" ${W}/><ellipse cx="37.5" cy="60" rx="6.5" ry="4.6" fill="${p.l}"/>` +
+        `<circle cx="34" cy="52" r="1.9" fill="${p.e}"/><circle cx="44" cy="52" r="1.9" fill="${p.e}"/>` +
+        `<path d="M37.2,57.6 L41.2,57.6 L39.2,60 Z" fill="${p.a}" stroke="${p.ae}" stroke-width="1"/><path d="M39.2,60 Q37,63 34.8,61.8 M39.2,60 Q41.4,63 43.6,61.8" fill="none" stroke="${p.e}" stroke-width="1.1" stroke-linecap="round"/>`,
+      half: clothBundle(50, 88, 30, 15),
+      halfTop: 73,
+    },
+  }),
 };
 
 function roughBlock(cx, bottom, w, h, p) {
@@ -591,22 +843,52 @@ function roughBlock(cx, bottom, w, h, p) {
   return `<g class="sc-rough"><path d="${d}" fill="${p.d}" stroke="${p.e}" stroke-width="1.8" stroke-linejoin="round"/>${marks}</g>`;
 }
 
-// built: whole pieces in place (0-6); half: half of the next piece is in;
-// newPart: index of a part that drops in with an animation.
-export function sculptureInner(id, { gold = false, built = PIECES, half = false, newPart = -1 } = {}) {
-  const pal = gold ? GOLD : STONE;
-  const parts = SCULPTURE_PARTS[id](pal);
+// The lower half of a stone piece as rough blocks: the lower half of each of
+// its bottom blocks, so a two-sided piece shows both, each on its own
+// support, and nothing overhangs.
+function roughHalf(art) {
+  const bottom = Math.max(...art.box.map((b) => b[3]));
+  return art.box.filter((b) => b[3] >= bottom - 1).map(([x0, y0, x1, y1]) => {
+    const w = x1 - x0;
+    return roughBlock((x0 + x1) / 2, y1, w * (w > 30 ? 0.84 : 0.96), Math.max(2.5, (y1 - y0) / 2), STONE);
+  }).join("");
+}
+
+function halfTopOf(art) {
+  if (art.half) return art.halfTop;
+  const bottom = Math.max(...art.box.map((b) => b[3]));
+  return Math.min(...art.box.filter((b) => b[3] >= bottom - 1).map(([, y0, , y1]) => y1 - (y1 - y0) / 2));
+}
+
+const sculptureDef = (id) => SCULPTURES.find((s) => s.id === id);
+
+// Each piece with its drawing, for the tests.
+export function pieceArt(id, { gold = false } = {}) {
+  const art = SC_ART[id](gold ? GOLD : STONE);
+  return sculptureDef(id).pieces.map((pc) => ({ ...pc, art: art[pc.id] }));
+}
+
+// built: whole pieces in place; half: half of the next piece is in;
+// newPart: index of a piece that arrives with an animation (stone and
+// creatures are set down, plants grow).
+export function sculptureInner(id, { gold = false, built = Infinity, half = false, newPart = -1 } = {}) {
+  const pieces = sculptureDef(id).pieces;
+  const art = SC_ART[id](gold ? GOLD : STONE);
+  const total = pieces.length;
+  const n = Math.min(built, total);
+  const anim = (i) => (i === newPart ? (pieces[i].kind === "plant" ? " sc-grow" : " sc-new") : "");
   let s = `<ellipse cx="50" cy="116" rx="42" ry="4" fill="rgba(40,30,10,.16)"/>`;
-  parts.forEach((d, i) => {
-    if (i < built) s += `<g class="${i === newPart ? "sc-new" : ""}">${d}</g>`;
-  });
-  if (built < PIECES && half) {
-    const [cx, bottom, w, h] = ROUGH[id][built];
-    s += `<g class="${built === newPart ? "sc-new" : ""}">${roughBlock(cx, bottom, Math.max(w * 0.8, 20), Math.max(h * 0.8, 18), STONE)}</g>`;
-  } else if (built === 0) {
-    s += roughBlock(50, 116, 40, 30, STONE);
+  if (n === 0 && !half) s += roughBlock(50, GROUND, 40, 30, STONE);
+  for (let i = 0; i < n; i++) {
+    const pc = pieces[i];
+    const body = pc.kind === "creature" ? `<g class="sc-creature">${art[pc.id].draw}</g>` : art[pc.id].draw;
+    s += `<g class="sc-piece sc-${pc.kind}${anim(i)}" data-piece="${pc.id}">${body}</g>`;
   }
-  if (gold && built >= PIECES) s += sparkle(12, 14, 6) + sparkle(90, 40, 5);
+  if (n < total && half) {
+    const a = art[pieces[n].id];
+    s += `<g class="sc-half${anim(n)}" data-half="${pieces[n].id}">${a.half || roughHalf(a)}</g>`;
+  }
+  if (gold && n >= total) s += sparkle(12, 20, 6) + sparkle(90, 40, 5);
   return s;
 }
 
@@ -623,14 +905,18 @@ export function coveredSVG({ cls = "", label = "A sculpture still under its clot
 }
 
 // fit: crop the empty space above an unfinished sculpture (the picture is
-// only as tall as what has been carved, so a first stone is not lost in a
+// only as tall as what has been built, so a first stone is not lost in a
 // big blank).
 export function sculptureSVG(id, opts = {}) {
-  const { cls = "", label = "Garden sculpture", fit = false, built = PIECES, half = false } = opts;
+  const { cls = "", label = "Garden sculpture", fit = false, built = Infinity, half = false } = opts;
+  const pieces = sculptureDef(id).pieces;
   let box = "0 0 100 120";
   let style = "";
-  if (fit && built < PIECES) {
-    const tops = ROUGH[id].slice(0, built + (half ? 1 : 0)).map(([, b, , h]) => b - h);
+  if (fit && built < pieces.length) {
+    const art = SC_ART[id](STONE);
+    const tops = pieces.slice(0, built).map((pc) => Math.min(...art[pc.id].box.map((b) => b[1])));
+    if (half) tops.push(halfTopOf(art[pieces[built].id]));
+    if (built === 0 && !half) tops.push(GROUND - 30);
     const top = Math.max(0, Math.min(86, ...tops) - 14);
     box = `0 ${top} 100 ${120 - top}`;
     style = `style="height:${((120 - top) * 1.5).toFixed(0)}px"`;

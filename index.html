@@ -10,10 +10,15 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <div id="test-banner" class="test-banner hidden" role="status">
+    <span><b>Test mode</b> <span id="test-day"></span></span>
+    <button id="test-tools" class="test-btn">Tools</button>
+    <button id="test-exit" class="test-btn">Exit</button>
+  </div>
   <div id="app">
     <section id="screen-garden" class="screen" aria-label="Your garden">
       <header class="topbar">
-        <h1 class="brand">Petal Patch</h1>
+        <h1 id="brand" class="brand">Petal Patch</h1>
         <div id="streak" class="streak" aria-live="polite"></div>
         <button id="mute-btn" class="icon-btn" aria-label="Sound is on. Tap to turn it off.">🔊</button>
       </header>
@@ -54,7 +59,7 @@
 
     <section id="screen-whole" class="screen whole hidden" aria-label="Your whole garden">
       <header class="topbar">
-        <div class="whole-title"><b>My whole garden</b><span id="whole-count"></span></div>
+        <div class="whole-title"><b>My whole garden</b></div>
         <button id="whole-close" class="icon-btn wide" aria-label="Close the whole garden">✕ Close</button>
       </header>
       <p class="whole-hint">Tap anything to see its name.</p>

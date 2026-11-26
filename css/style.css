@@ -68,6 +68,8 @@ button {
   min-height: 64px;
 }
 .brand {
+  -webkit-user-select: none;
+  user-select: none;
   font-size: 26px;
   margin: 0;
   color: var(--leaf-dark);
@@ -192,6 +194,7 @@ button {
 /* ---- sculptures ---- */
 .sc-new { transform-box: fill-box; transform-origin: 50% 100%; animation: drop 0.9s cubic-bezier(0.2, 1.4, 0.4, 1) 0.35s both; }
 @keyframes drop { 0% { transform: translateY(-40px); opacity: 0; } 60% { opacity: 1; } 100% { transform: none; opacity: 1; } }
+.sc-grow { transform-box: fill-box; transform-origin: 50% 100%; animation: grow 1.2s ease-out 0.35s both; }
 .sheet .sx-pair { display: flex; justify-content: center; align-items: flex-end; gap: 4px; }
 .sheet .sx-pair .gnome { width: 124px; height: 130px; }
 .sheet > .gnome { width: 110px; height: 115px; }
@@ -267,6 +270,11 @@ button {
 .whole-close-2 { margin-top: 12px; }
 .bloom { transform-box: fill-box; transform-origin: 50% 100%; animation: bloom 1s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
 @keyframes bloom { 0% { transform: scale(0) rotate(-20deg); opacity: 0; } 60% { opacity: 1; } 100% { transform: scale(1) rotate(0); opacity: 1; } }
+/* A new flower: a little sprout comes up, then the flower grows into place. */
+.grow { transform-box: fill-box; transform-origin: 50% 100%; animation: grow 1.4s ease-out both; }
+@keyframes grow { 0%, 22% { transform: scale(0.2, 0); opacity: 0; } 45% { transform: scale(0.35, 0.4); opacity: 1; } 100% { transform: none; opacity: 1; } }
+.sprout-tip { transform-box: fill-box; transform-origin: 50% 100%; animation: sprouttip 1.4s ease-out both; }
+@keyframes sprouttip { 0% { transform: scale(0); opacity: 0; } 18% { transform: scale(1); opacity: 1; } 40% { opacity: 1; } 55%, 100% { transform: scale(1); opacity: 0; } }
 .visitor.arrive { transform-box: fill-box; transform-origin: 50% 100%; animation: hop 1.2s ease-out 0.4s both; }
 @keyframes hop { 0% { transform: translateY(-80px) scale(0.4); opacity: 0; } 50% { transform: translateY(6px) scale(1.1); opacity: 1; } 70% { transform: translateY(-10px); } 100% { transform: none; } }
 .firefly { animation: twinkle 3s ease-in-out infinite; }
@@ -286,7 +294,7 @@ button {
   text-align: center;
 }
 .board-wrap { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; padding: 8px; min-height: 0; }
-.board { position: relative; }
+.board { position: relative; isolation: isolate; } /* tiles stack among themselves, never above a sheet */
 
 .tile {
   position: absolute;
@@ -485,3 +493,32 @@ button {
   .actions { padding: 8px 12px 10px; gap: 8px; }
   .btn.big { min-height: 60px; }
 }
+
+/* ---- the owner's test mode ---- */
+.test-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 90;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 12px;
+  background: #3a2a6e;
+  color: #fff;
+  font-size: 17px;
+}
+.test-banner > span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.test-banner #test-day { font-size: 14px; opacity: 0.85; }
+.test-btn { min-height: 36px; padding: 2px 14px; border-radius: 12px; border: 2px solid #fff; background: transparent; color: #fff; font-weight: 700; font-size: 17px; }
+body.testing #app { height: calc(100vh - 44px); height: calc(100dvh - 44px); margin-top: 44px; }
+.test-panel { text-align: left; display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.test-panel h3 { margin: 12px 0 0; font-size: 19px; color: var(--leaf-dark); }
+.test-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.test-grid .btn { padding: 6px 0; min-height: 52px; }
+.test-row { display: flex; gap: 8px; }
+.test-row input { flex: 1; min-width: 0; min-height: 52px; font: inherit; font-size: 18px; padding: 6px 10px; border-radius: 14px; border: 2px solid #d9c9ad; background: #fff; }
+.test-row .btn { flex: none; }
+.test-row.test-col { flex-direction: column; }

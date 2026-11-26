@@ -3,12 +3,14 @@
 
 import { boardFor } from "./logic/boards.js";
 import { newRound, tap, undo, canUndo, replay, isExposed, TRAY_SIZE } from "./logic/engine.js";
-import { dayKeyOf, dayNumber, weekNumber } from "./logic/dates.js";
+import { dayKeyOf, dayNumber, weekNumber, dayKeyFromNumber, prettyDay } from "./logic/dates.js";
 import { recordPlay, streakView } from "./logic/streak.js";
 import { checkCode } from "./logic/weekly.js";
-import { recordBoard, boardsUntilAwake, startVisit, answer } from "./logic/sphinx.js";
-import { PIECES, sculptureView, addHalves, collectionRows, piecesText, displayName, progressLabel, rewardText, SURPRISE_NAME } from "./logic/sculpture.js";
-import { FLOWERS, SETS, SPECIALS, VISITORS, recordWin, nextLocked, chestReady, openDailyChest, specialForWeek, flowerById } from "./logic/garden.js";
+import { recordBoard, boardsUntilAwake, startVisit, answer, withSeed } from "./logic/sphinx.js";
+import { SCULPTURES, sculptureView, addHalves, collectionRows, displayName, progressWords, rewardText, SURPRISE_NAME, halvesToFinish, GOLD_START, ROUND_PIECES } from "./logic/sculpture.js";
+import { FLOWERS, SETS, SPECIALS, VISITORS, emptyGarden, recordWin, nextLocked, chestReady, openDailyChest, specialForWeek, flowerById } from "./logic/garden.js";
+import * as testmode from "./logic/testmode.js";
+import { titleTap, losingTaps } from "./logic/testmode.js";
 import { recordRound, recordWinStat, recordSphinxStat } from "./logic/stats.js";
 import QUESTIONS from "../data/questions.js";
 import * as store from "./store.js";
@@ -19,19 +21,8 @@ import { SKIN } from "./skin.js";
 // The question-asker of this skin (in the garden: Old Moss the gnome).
 const ASKER = SKIN.asker;
 
-// Tile symbols. Each has its own background tint so kinds differ by colour
-// as well as by picture.
-const SYMBOLS = [
-  { e: "🍎", name: "apple", bg: "#ffd3cc", burst: "#e0312f" },
-  { e: "🍋", name: "lemon", bg: "#fff2a0", burst: "#f5c400" },
-  { e: "🍇", name: "grapes", bg: "#e5d6ff", burst: "#7a3fb8" },
-  { e: "🥕", name: "carrot", bg: "#ffdfb8", burst: "#ff8a1f" },
-  { e: "🍀", name: "clover", bg: "#d3efc4", burst: "#3f9a3a" },
-  { e: "🦋", name: "butterfly", bg: "#cfe3ff", burst: "#3a7be0" },
-  { e: "🍄", name: "mushroom", bg: "#ffd9ec", burst: "#d9467a" },
-  { e: "🐌", name: "snail", bg: "#eadcc6", burst: "#9a6b43" },
-  { e: "🐝", name: "bee", bg: "#cdeeea", burst: "#e0a800" },
-];
+// Tile pictures come from the skin (each kind its own picture and tint).
+const SYMBOLS = SKIN.tiles;
 const PETAL_COLORS = ["#ff8fb3", "#ffd23f", "#ffffff", "#c79ae8", "#ff9e6b", "#8fd16a"];
 const CHEERS = ["Nice!", "Lovely!", "Wonderful!", "Blooming great!"];
 
@@ -39,15 +30,30 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const later = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// The owner's test mode, if it is on in this tab (see the end of this file).
+function testMode() {
+  try {
+    return testmode.readMode(sessionStorage);
+  } catch (e) {
+    return null;
+  }
+}
+
 let st = store.load();
+// Each phone gets its own question order, seeded once and kept in the save.
+if (st.sphinx.seed == null) {
+  st.sphinx = withSeed(st.sphinx);
+  store.save(st);
+}
 setMuted(st.muted);
 const save = () => store.save(st);
 
-// For walk-throughs: ?date=2026-12-01 pretends today is that day.
+// For walk-throughs: ?date=2026-12-01 pretends today is that day. In test
+// mode the owner can also pretend it is a later day.
 function today() {
   const p = new URLSearchParams(location.search).get("date");
-  if (p && /^\d{4}-\d{2}-\d{2}$/.test(p)) return dayNumber(p);
-  return dayNumber(dayKeyOf(new Date()));
+  const real = p && /^\d{4}-\d{2}-\d{2}$/.test(p) ? dayNumber(p) : dayNumber(dayKeyOf(new Date()));
+  return testmode.gameDay(real, testMode());
 }
 
 function vibrate(ms) {
@@ -183,16 +189,16 @@ function fitHome() {
 if (window.ResizeObserver) new ResizeObserver(() => fitHome()).observe($("garden-scene"));
 
 // What to call a sculpture in the garden: finished ones by name; the one being
-// carved stays a surprise.
+// carved stays a surprise. No numbers: the pieces standing show how far it is.
 function sculptureName(it) {
-  return it.done ? it.name : `${displayName(it)}, ${piecesText(it.built, it.half)}`;
+  return it.done ? it.name : `${displayName(it)}, ${ASKER.stillCarving}`;
 }
 
 // The question-asker's corner above the garden: napping with a count, or
 // awake with a question.
 function building() {
   const c = sculptureView(st.sculpture).current;
-  return { ...c, progress: piecesText(c.built, c.half), label: progressLabel(c) };
+  return { ...c, words: progressWords(c, ASKER) };
 }
 
 function renderSphinxStrip() {
@@ -203,8 +209,8 @@ function renderSphinxStrip() {
   btn.classList.toggle("awake", awake);
   const title = awake ? ASKER.awakeTitle : ASKER.asleepTitle;
   const line = awake ? ASKER.awakeLine : ASKER.asleepLine(n);
-  btn.innerHTML = `${ASKER.art({ asleep: !awake })}<span class="sx-text"><b>${title}</b><span>${line}</span><small>${esc(b.label)}</small></span>`;
-  btn.setAttribute("aria-label", `${title} ${line} ${b.label}.`);
+  btn.innerHTML = `${ASKER.art({ asleep: !awake })}<span class="sx-text"><b>${title}</b><span>${line}</span><small>${esc(b.words)}</small></span>`;
+  btn.setAttribute("aria-label", `${title} ${line} ${b.words}`);
 }
 
 function goGarden() {
@@ -222,7 +228,7 @@ function startRound(ref, resume = null) {
   const board = boardFor(ref);
   const deal = board.deal;
   let state = resume ? replay(deal, resume.taps, resume.undoUsed) : newRound(deal);
-  if (state.status !== "playing") state = newRound(deal);
+  if (state.status !== "playing" || (resume && state.taps.length !== resume.taps.length)) state = newRound(deal);
   play = { ref, deal, state, busy: false, combo: 0, lastMatchTap: -99, exposed: [], teach: ref.kind === "path" && ref.index === 0 && st.wins === 0 };
   if (!resume) {
     const d = today();
@@ -600,7 +606,7 @@ function showChest() {
 // Called "sphinx" in the code; the player meets the skin's asker (Old Moss).
 
 function sculptureFor(view, opts = {}) {
-  return sculptureSVG(view.sculpture.id, { gold: view.gold, built: view.built, half: view.half, label: `${displayName(view)}, ${piecesText(view.built, view.half)}`, ...opts });
+  return sculptureSVG(view.sculpture.id, { gold: view.gold, built: view.built, half: view.half, label: `${displayName(view)}, ${ASKER.stillCarving}`, ...opts });
 }
 
 function showSphinx() {
@@ -640,7 +646,7 @@ function showSphinxAsleep() {
     `<div class="sx-pair">${ASKER.art({ asleep: true })}${sculptureFor(b, { cls: "sx-goal" })}</div>
      <h2>${ASKER.napHeading}</h2>
      <p>${ASKER.napLine(n)}</p>
-     <p class="note">${ASKER.napNote(b.progress)}</p>
+     <p class="note">${esc(b.words)} ${ASKER.napNote}</p>
      <div class="stack">
        <button class="btn primary big" data-act="play">Play a board</button>
        <button class="btn link" data-act="close">Close</button>
@@ -684,14 +690,20 @@ function onAnswer(choice) {
   save();
   sfx.right();
 
-  const words = rewardText(add, { firstTry: res.firstTry });
+  showSculptureReward(add, { firstTry: res.firstTry, head: `<div class="verdict good">That's right!</div>
+     <div class="riddle">${draft}${esc(q.explain)}</div>` });
+}
+
+// What a reward did to the sculpture: the new piece (or half) in place, in
+// plain words, or the reveal when it is finished.
+function showSculptureReward(add, { firstTry, head = "" }) {
+  const words = rewardText(add, { firstTry, asker: ASKER });
   const nb = nextButtons();
   if (add.finished) {
     // The reveal: under a cloth first, then the finished sculpture and its name.
     const f = add.finished;
     sheet(
-      `<div class="verdict good">That's right!</div>
-       <div class="riddle">${draft}${esc(q.explain)}</div>
+      `${head}
        <div class="sx-art" id="reveal-art">${coveredSVG({ cls: "sx-reward shiver", mark: "" })}</div>
        <div id="reveal-words"><p class="note">${ASKER.finishing}</p></div>
        <div class="stack">${nb.html}</div>`,
@@ -700,7 +712,7 @@ function onAnswer(choice) {
     later(1300).then(() => {
       const art = $("reveal-art");
       if (!art) return;
-      art.innerHTML = sculptureSVG(f.sculpture.id, { gold: f.gold, built: PIECES, label: f.name, cls: "sx-reward unveil" });
+      art.innerHTML = sculptureSVG(f.sculpture.id, { gold: f.gold, label: f.name, cls: "sx-reward unveil" });
       $("reveal-words").innerHTML = `<h2 class="reveal-name">${esc(words.title)}</h2>
         <div class="news gold">${esc(words.line)}</div>
         <p class="note">${esc(words.note)}</p>`;
@@ -714,10 +726,9 @@ function onAnswer(choice) {
   const newPart = add.placed ? add.placed.partIndex : v.built;
   const art = sculptureFor(v, { newPart, cls: "sx-reward", fit: true });
   const news = `<div class="news"><b>${esc(words.title)}</b> ${esc(words.line)}</div>
-    <p class="note">${esc(words.note)}</p>`;
+    ${words.note ? `<p class="note">${esc(words.note)}</p>` : ""}`;
   sheet(
-    `<div class="verdict good">That's right!</div>
-     <div class="riddle">${draft}${esc(q.explain)}</div>
+    `${head}
      <div class="sx-art">${art}</div>
      ${news}
      <div class="stack">${nb.html}</div>`,
@@ -848,12 +859,12 @@ function showCollection() {
       // Finished at least once: drawn and named.
       pic = sculptureSVG(sc.id, { gold: row.goldFinished > 0, label: row.shownName });
       lines.push(`<b>${esc(row.shownName)}</b>`, "finished");
-      if (row.building) lines.push(`Gold: ${piecesText(row.building.built, row.building.half)}`);
-      if (row.goldFinished) lines.push(`Gold: ${row.goldFinished} finished`);
+      if (row.goldFinished) lines.push("finished in gold too");
+      if (row.building) lines.push("being carved in gold");
     } else if (row.building) {
       // Being carved: still under its cloth.
-      pic = coveredSVG({ label: `${SURPRISE_NAME}, ${piecesText(row.building.built, row.building.half)}` });
-      lines.push(`<b>${SURPRISE_NAME}</b>`, piecesText(row.building.built, row.building.half));
+      pic = coveredSVG({ label: `${SURPRISE_NAME}, ${ASKER.stillCarving}` });
+      lines.push(`<b>${SURPRISE_NAME}</b>`, "being carved");
     } else {
       pic = coveredSVG({ cls: "unknown", label: "A sculpture not started yet" });
       lines.push("<b>?</b>", "not started");
@@ -871,8 +882,6 @@ function showCollection() {
 function showWholeGarden() {
   const sv = sculptureView(st.sculpture);
   const g = gardenScene(st.garden, { sculpture: sv, sculptureName });
-  const flowers = st.garden.planted.length;
-  $("whole-count").textContent = `${flowers} flower${flowers === 1 ? "" : "s"} \u00B7 ${sv.finished.length} sculpture${sv.finished.length === 1 ? "" : "s"}`;
   $("whole-scene").innerHTML = `<svg class="garden-svg" viewBox="0 0 360 ${g.height}" width="100%" role="img" aria-label="Your whole garden">${g.svg}</svg>`;
   $("whole-name").classList.add("hidden");
   $("screen-whole").classList.remove("hidden");
@@ -903,6 +912,240 @@ function showName(e) {
   clearTimeout(nameTimer);
   nameTimer = setTimeout(() => tag.classList.add("hidden"), 2200);
 }
+
+// ---------------------------------------------------------------- the owner's test mode
+// Hidden: five quick taps on the "Petal Patch" title. Everything here plays
+// on a copy of the save (js/logic/testmode.js); the real garden, streak and
+// stats are never touched, and leaving puts the real save back as it was.
+
+let titleTimes = [];
+$("brand").addEventListener("click", () => {
+  const r = titleTap(titleTimes, Date.now());
+  titleTimes = r.times;
+  if (r.open) openTestMode();
+});
+
+function reloadState() {
+  st = store.load();
+  st.sphinx = withSeed(st.sphinx);
+  setMuted(st.muted);
+  syncMute();
+}
+
+function syncTestBanner() {
+  const m = testMode();
+  document.body.classList.toggle("testing", !!m);
+  $("test-banner").classList.toggle("hidden", !m);
+  if (m) $("test-day").textContent = m.offset ? `pretending +${m.offset} day${m.offset === 1 ? "" : "s"}` : "";
+}
+
+function openTestMode() {
+  unlock();
+  if (!testMode()) {
+    testmode.enter(localStorage, sessionStorage, store.KEY);
+    reloadState();
+    syncTestBanner();
+  }
+  showTestPanel();
+}
+
+function leaveTestMode() {
+  testmode.exit(sessionStorage);
+  play = null;
+  reloadState();
+  syncTestBanner();
+  closeWholeGarden();
+  goGarden();
+}
+
+// Back to the garden, redrawn from the current (test) save.
+function testDone() {
+  syncTestBanner();
+  closeWholeGarden();
+  goGarden();
+}
+
+function onPlayScreen() {
+  return play && !$("screen-play").classList.contains("hidden") && play.state.status === "playing";
+}
+
+function testWinNow() {
+  if (!onPlayScreen()) startRound(nextRef().ref);
+  play.state = replay(play.deal, play.deal.solution);
+  closeSheet();
+  refreshTiles(false);
+  renderTray(play.state.tray);
+  updateHud();
+  onWin();
+}
+
+function testLoseNow() {
+  if (!onPlayScreen()) startRound(nextRef().ref);
+  const taps = losingTaps(play.deal);
+  if (!taps) return;
+  play.state = replay(play.deal, taps);
+  saveCurrent();
+  closeSheet();
+  refreshTiles(false);
+  renderTray(play.state.tray);
+  updateHud();
+  sfx.lose();
+  showLose();
+}
+
+function testSculpture(halves, firstTry) {
+  const add = addHalves(st.sculpture, halves);
+  st.sculpture = add.sculpture;
+  save();
+  showSculptureReward(add, { firstTry, head: `<p class="note">Test mode</p>` });
+}
+
+function testGarden(fill) {
+  const ids = FLOWERS.map((f) => f.id);
+  const g = emptyGarden();
+  let halves = 0;
+  if (fill === "half") {
+    g.unlocked = ids.slice(0, 12);
+    g.planted = ids.slice(0, 12).map((k, i) => ({ k, d: today() - 12 + i }));
+    g.specials = SPECIALS.slice(0, 3).map((f) => f.id);
+    g.planted.push(...g.specials.map((k) => ({ k, d: today() })));
+    g.visitors = VISITORS.slice(0, 5).map((v) => v.id);
+    halves = 2 * SCULPTURES.slice(0, 3).reduce((n, sc) => n + sc.pieces.length, 0);
+  } else if (fill === "all") {
+    g.unlocked = ids;
+    g.planted = ids.map((k, i) => ({ k, d: today() - 24 + i }));
+    g.specials = SPECIALS.map((f) => f.id);
+    g.planted.push(...g.specials.map((k) => ({ k, d: today() })));
+    g.visitors = VISITORS.map((v) => v.id);
+    halves = GOLD_START;
+  }
+  g.unlockDay = fill === "empty" ? null : today();
+  st.garden = g;
+  st.sculpture = { v: 2, halves };
+  st.seenPlanted = fill === "empty" ? 0 : Math.max(0, g.planted.length - 3);
+  st.seenVisitors = g.visitors.length;
+  st.seenPieces = Math.floor(halves / 2);
+  save();
+  testDone();
+}
+
+function testPretend(days) {
+  const m = testMode();
+  testmode.setOffset(sessionStorage, days === 0 ? 0 : m.offset + days);
+  if (st.current && st.current.ref.kind === "daily" && st.current.ref.day !== today()) {
+    st.current = null;
+    save();
+  }
+  testDone();
+}
+
+function showTestPanel() {
+  const m = testMode();
+  const d = today();
+  const pathBtns = Array.from({ length: 12 }, (_, i) => `<button class="btn" data-act="path" data-n="${i + 1}">${i + 1}</button>`).join("");
+  const dayText = prettyDay(d, { weekday: true }) + (m.offset ? ` (pretend, +${m.offset} day${m.offset === 1 ? "" : "s"})` : "");
+  sheet(
+    `<h2>Test mode</h2>
+     <p class="note">You are playing on a copy. Your real garden, streak and play record are not changed. Today is ${esc(dayText)}.</p>
+     <div class="test-panel">
+       <h3>Play a board</h3>
+       <div class="test-grid">${pathBtns}</div>
+       <form class="test-row" data-form="path"><input name="n" type="number" min="1" max="999" inputmode="numeric" placeholder="Path board number" aria-label="Path board number"><button class="btn" type="submit">Play</button></form>
+       <button class="btn big" data-act="daily">Today's board</button>
+       <form class="test-row test-col" data-form="date"><input name="date" type="date" value="${dayKeyFromNumber(d)}" aria-label="Date for a daily board"><button class="btn" type="submit">Play that day's board</button></form>
+       <button class="btn big" data-act="bonus">This week's bonus board</button>
+       <h3>This board</h3>
+       <button class="btn big" data-act="win">Win this board now</button>
+       <button class="btn big" data-act="lose">Lose this board now</button>
+       <h3>Old Moss and the sculpture</h3>
+       <button class="btn big" data-act="wake">Wake Old Moss now</button>
+       <button class="btn big" data-act="whole">Add a whole piece</button>
+       <button class="btn big" data-act="half">Add a half piece</button>
+       <button class="btn big" data-act="finish">Finish this sculpture</button>
+       <button class="btn big" data-act="gold">Jump to the gold round</button>
+       <h3>Garden</h3>
+       <button class="btn big" data-act="g-empty">Empty garden</button>
+       <button class="btn big" data-act="g-half">Half full garden</button>
+       <button class="btn big" data-act="g-all">Everything earned</button>
+       <h3>Daily things</h3>
+       <button class="btn big" data-act="chest">Open the daily chest now</button>
+       <button class="btn big" data-act="code">Unlock this week's code</button>
+       <h3>Pretend it is</h3>
+       <button class="btn big" data-act="day1">Tomorrow</button>
+       <button class="btn big" data-act="day2">In 2 days</button>
+       <button class="btn big" data-act="day7">Next week</button>
+       ${m.offset ? `<button class="btn big" data-act="day0">Back to the real today</button>` : ""}
+       <h3>Start over</h3>
+       <button class="btn big" data-act="reset">Start the test save over from nothing</button>
+     </div>
+     <div class="stack">
+       <button class="btn primary big" data-act="close">Close</button>
+       <button class="btn big" data-act="exit">Exit test mode</button>
+     </div>`,
+    {
+      path: (b) => startRound({ kind: "path", index: Number(b.dataset.n) - 1 }),
+      daily: () => startRound({ kind: "daily", day: today() }),
+      bonus: () => startRound({ kind: "bonus", week: weekNumber(today()) }),
+      submit: (form) => {
+        if (form.dataset.form === "path") {
+          const n = Math.floor(Number(form.elements.n.value));
+          if (n >= 1) startRound({ kind: "path", index: n - 1 });
+        } else if (/^\d{4}-\d{2}-\d{2}$/.test(form.elements.date.value)) {
+          startRound({ kind: "daily", day: dayNumber(form.elements.date.value) });
+        }
+      },
+      win: () => testWinNow(),
+      lose: () => testLoseNow(),
+      wake: () => {
+        st.sphinx = { ...st.sphinx, awake: true, boards: 0 };
+        save();
+        testDone();
+      },
+      whole: () => testSculpture(2, true),
+      half: () => testSculpture(1, false),
+      finish: () => testSculpture(halvesToFinish(st.sculpture), true),
+      gold: () => {
+        st.sculpture = { v: 2, halves: GOLD_START };
+        st.seenPieces = ROUND_PIECES;
+        save();
+        testDone();
+      },
+      "g-empty": () => testGarden("empty"),
+      "g-half": () => testGarden("half"),
+      "g-all": () => testGarden("all"),
+      chest: () => {
+        st.lastWinDay = today();
+        st.chestDay = null;
+        save();
+        showScreen("garden");
+        showChest();
+      },
+      code: () => {
+        const w = weekNumber(today());
+        st.codes[w] = { redeemed: true, won: false };
+        save();
+        showScreen("garden");
+        showCode();
+      },
+      day1: () => testPretend(1),
+      day2: () => testPretend(2),
+      day7: () => testPretend(7),
+      day0: () => testPretend(0),
+      reset: () => {
+        st = store.defaults();
+        st.sphinx = withSeed(st.sphinx);
+        save();
+        play = null;
+        testDone();
+      },
+      close: () => closeSheet(),
+      exit: () => leaveTestMode(),
+    },
+  );
+}
+
+$("test-tools").addEventListener("click", () => openTestMode());
+$("test-exit").addEventListener("click", () => leaveTestMode());
 
 // ---------------------------------------------------------------- effects
 
@@ -1025,6 +1268,7 @@ if (st.current && st.current.ref.kind === "daily" && st.current.ref.day !== toda
 }
 
 syncMute();
+syncTestBanner();
 showScreen("garden");
 renderGarden();
 

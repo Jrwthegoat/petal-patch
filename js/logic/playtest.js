@@ -5,8 +5,10 @@
 
 import { newRound, tap, exposedTiles } from "./engine.js";
 import { mulberry32 } from "./rng.js";
+import { kindPeak } from "./deal.js";
 
-export function casualPlay(deal, rng) {
+// Plays one game; returns true on a win. taps (optional) collects the taps.
+export function casualPlay(deal, rng, taps = null) {
   let s = newRound(deal);
   const sym = (t) => deal.cells[t].sym;
   while (s.status === "playing") {
@@ -22,7 +24,9 @@ export function casualPlay(deal, rng) {
     if (!choice.length) choice = ex;
     const best = Math.max(...choice.map((t) => held[sym(t)] || 0));
     const top = choice.filter((t) => (held[sym(t)] || 0) === best);
-    s = tap(deal, s, top[Math.floor(rng() * top.length)]).state;
+    const t = top[Math.floor(rng() * top.length)];
+    if (taps) taps.push(t);
+    s = tap(deal, s, t).state;
   }
   return s.status === "won";
 }
@@ -32,4 +36,18 @@ export function winRate(deal, games = 300, seed = 12345) {
   let w = 0;
   for (let g = 0; g < games; g++) if (casualPlay(deal, rng)) w++;
   return w / games;
+}
+
+// Win rate, and the share of games that ever show more than 4 tappable tiles
+// of one kind at once.
+export function casualStats(deal, games = 60, seed = 777) {
+  const rng = mulberry32(seed);
+  let w = 0;
+  let over4 = 0;
+  for (let g = 0; g < games; g++) {
+    const taps = [];
+    if (casualPlay(deal, rng, taps)) w++;
+    if (kindPeak(deal, taps) > 4) over4++;
+  }
+  return { win: w / games, over4: over4 / games };
 }

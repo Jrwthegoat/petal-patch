@@ -26,12 +26,12 @@
   <div id="out"></div>
   <button id="reset">Start over on this phone</button>
   <script type="module">
-    import { load, KEY } from "./js/store.js";
+    import { loadReal, KEY } from "./js/store.js";
     import { summary } from "./js/logic/stats.js";
     import { FLOWERS } from "./js/logic/garden.js";
     import { SKIN } from "./js/skin.js";
 
-    const st = load();
+    const st = loadReal(); // never the owner's test-mode copy
     const s = summary(st.stats);
     const missed = Object.values(st.sphinx.recs || {}).filter((r) => r.missed).length;
     const asked = Object.keys(st.sphinx.recs || {}).length;
