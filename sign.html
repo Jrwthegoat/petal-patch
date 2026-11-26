@@ -45,13 +45,13 @@
 <body>
   <main id="sign"></main>
   <div class="controls" id="controls"></div>
-  <script src="v58c28aa/js/vendor/qrcode.js"></script>
+  <script src="v2b7d2ba/js/vendor/qrcode.js"></script>
   <script type="module">
-    import { GAME_URL } from "./v58c28aa/js/config.js";
-    import { weeklyCode } from "./v58c28aa/js/logic/weekly.js";
-    import { dayKeyOf, dayNumber, weekNumber, weekStartDay, prettyDay } from "./v58c28aa/js/logic/dates.js";
-    import { specialForWeek } from "./v58c28aa/js/logic/garden.js";
-    import { flowerSVG } from "./v58c28aa/js/art.js";
+    import { GAME_URL } from "./v2b7d2ba/js/config.js";
+    import { weeklyCode } from "./v2b7d2ba/js/logic/weekly.js";
+    import { dayKeyOf, dayNumber, weekNumber, weekStartDay, prettyDay } from "./v2b7d2ba/js/logic/dates.js";
+    import { specialForWeek } from "./v2b7d2ba/js/logic/garden.js";
+    import { flowerSVG } from "./v2b7d2ba/js/art.js";
 
     const p = new URLSearchParams(location.search);
     const d = p.get("date") ? dayNumber(p.get("date")) : dayNumber(dayKeyOf(new Date()));

@@ -62,18 +62,20 @@ export const SPECIALS = [
   { id: "s-pearl", name: "Pearl Blossom", shape: "round", petals: 8, color: "#fff8f0", edge: "#c9b8a8", inner: "#ffe6f0", center: "#f0d8e8", special: true },
 ];
 
-// Bonus chest gifts: small visitors who move into the garden.
+// Bonus chest gifts: small visitors who move into the garden. Each is drawn
+// whole in js/art.js (never with a phone's emoji font, which on some phones
+// draws only a head or a face).
 export const VISITORS = [
-  { id: "bird", emoji: "\u{1F426}", name: "a little bird" },
-  { id: "rabbit", emoji: "\u{1F407}", name: "a rabbit" },
-  { id: "frog", emoji: "\u{1F438}", name: "a frog" },
-  { id: "ladybug", emoji: "\u{1F41E}", name: "a ladybug" },
-  { id: "turtle", emoji: "\u{1F422}", name: "a turtle" },
-  { id: "duck", emoji: "\u{1F986}", name: "a duck" },
-  { id: "hedgehog", emoji: "\u{1F994}", name: "a hedgehog" },
-  { id: "owl", emoji: "\u{1F989}", name: "an owl" },
-  { id: "chipmunk", emoji: "\u{1F43F}\u{FE0F}", name: "a chipmunk" },
-  { id: "dove", emoji: "\u{1F54A}\u{FE0F}", name: "a dove" },
+  { id: "bird", name: "a little bird" },
+  { id: "rabbit", name: "a rabbit" },
+  { id: "frog", name: "a frog" },
+  { id: "ladybug", name: "a ladybug" },
+  { id: "turtle", name: "a turtle" },
+  { id: "duck", name: "a duck" },
+  { id: "hedgehog", name: "a hedgehog" },
+  { id: "owl", name: "an owl" },
+  { id: "chipmunk", name: "a chipmunk" },
+  { id: "dove", name: "a dove" },
 ];
 
 export function flowerById(id) {

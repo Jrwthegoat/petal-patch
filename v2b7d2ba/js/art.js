@@ -172,8 +172,9 @@ function fireflies() {
 const VISITOR_SPOTS = {
   owl: { near: "orchard", at: [56, 100], else: [34, 160] },
   chipmunk: { near: "orchard", at: [86, 168], else: [86, 168] },
-  bird: { near: "meadow", at: [174, 128], else: [334, 164] },
-  dove: { near: "meadow", at: [226, 128], else: [232, 164] },
+  // On the grass in front of the fence (a picket's pointed top is no perch).
+  bird: { near: "meadow", at: [224, 175], else: [334, 164] },
+  dove: { near: "meadow", at: [266, 175], else: [232, 164] },
   duck: { near: "pond", at: [292, 226], else: [300, 226] },
   frog: { near: "pond", at: [326, 230], else: [338, 256] },
   turtle: { near: "pond", at: [228, 254], else: [228, 254] },
@@ -186,6 +187,161 @@ export function visitorSpot(id, sets) {
   const v = VISITOR_SPOTS[id];
   if (!v) return [120, 210];
   return v.near && !sets.has(v.near) ? v.else : v.at;
+}
+
+// Garden visitors, drawn whole: head to feet or tail, never a head alone.
+// Drawn here rather than with emoji so they look the same on every phone (a
+// phone's own emoji font may draw only a bird's head or a frog's face).
+// Each fits a 40 x 36 box, standing on the ground line y = 35, centred on x = 20.
+const VW = 40;
+const VH = 36;
+const VGROUND = 35;
+const eye = (x, y, r = 1.3) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#2b2118"/><circle cx="${(x + r * 0.35).toFixed(2)}" cy="${(y - r * 0.35).toFixed(2)}" r="${(r * 0.35).toFixed(2)}" fill="#fff"/>`;
+
+function hedgehogSpines() {
+  const pts = [];
+  const n = 15;
+  for (let i = 0; i <= n * 2; i++) {
+    const a = Math.PI + (i / (n * 2)) * Math.PI * 0.86;
+    const k = i % 2 ? 1.28 : 1;
+    pts.push(`${(17 + 14 * k * Math.cos(a)).toFixed(1)},${(29 + 13 * k * Math.sin(a)).toFixed(1)}`);
+  }
+  return `M3,30 L${pts.join(" L")} L30,30 Z`;
+}
+
+const VISITOR_ART = {
+  bird: () =>
+    `<path d="M17.5,30 L17,34.6 M22.5,30 L22.5,34.6 M14.6,35 L19.4,35 M20,35 L25,35" stroke="#8a5a33" stroke-width="1.3" stroke-linecap="round" fill="none"/>` +
+    `<path d="M11,23 L2,18.5 L3.5,27.5 Z" fill="#6b4a30" stroke="#3e2a18" stroke-width="1" stroke-linejoin="round"/>` +
+    `<ellipse cx="19" cy="24" rx="10.5" ry="8" fill="#8a6040" stroke="#4e3220" stroke-width="1.1"/>` +
+    `<path d="M21,18.5 Q31,19 29.5,26 Q27,31.5 20,31.6 Q25,26 21,18.5 Z" fill="#f08a3c"/>` +
+    `<path d="M10,22 Q18,16.5 24,22.5 Q17,28.5 10,22 Z" fill="#6b4a30" stroke="#3e2a18" stroke-width="0.9"/>` +
+    `<circle cx="27" cy="14.5" r="6.3" fill="#8a6040" stroke="#4e3220" stroke-width="1.1"/>` +
+    `<path d="M24,18.5 Q29,21.5 32.2,16.5" fill="#f08a3c"/>` +
+    `<path d="M32.6,12.8 L37.6,14.6 L32.6,16.6 Z" fill="#f2b233" stroke="#a8700f" stroke-width="0.8" stroke-linejoin="round"/>` +
+    eye(29, 13),
+  dove: () =>
+    `<path d="M19,30 L19,34.6 M23,30 L23,34.6 M16.5,35 L21,35 M21,35 L25.5,35" stroke="#d9707f" stroke-width="1.3" stroke-linecap="round" fill="none"/>` +
+    `<path d="M28,23 L39,19.5 L38,28.5 Z" fill="#e3e7ee" stroke="#8d97aa" stroke-width="1" stroke-linejoin="round"/>` +
+    `<ellipse cx="21" cy="24.5" rx="11.5" ry="7.5" fill="#f9fafc" stroke="#8d97aa" stroke-width="1.1"/>` +
+    `<path d="M15,22.5 Q25,15.5 34,21.5 Q25,30 15,22.5 Z" fill="#e3e7ee" stroke="#8d97aa" stroke-width="0.9"/>` +
+    `<path d="M26,21 L31,22.5 M25,23.5 L30,25" stroke="#a9b2c3" stroke-width="0.8"/>` +
+    `<circle cx="11.5" cy="15" r="5.6" fill="#f9fafc" stroke="#8d97aa" stroke-width="1.1"/>` +
+    `<path d="M6.3,14 L2,15.8 L6.3,17.2 Z" fill="#e0a26a" stroke="#a06a3a" stroke-width="0.7" stroke-linejoin="round"/>` +
+    `<path d="M3,16.5 Q2,20 4.5,22.5" stroke="#5a8a3a" stroke-width="0.9" fill="none"/><ellipse cx="2.6" cy="19.5" rx="1.1" ry="2" fill="#7cb35a"/><ellipse cx="5.4" cy="21.6" rx="2" ry="1.1" fill="#7cb35a"/>` +
+    eye(10, 13.8, 1.2),
+  owl: () =>
+    `<path d="M10,18 Q5,26 11,32.5 Q14,26 12.5,18 Z M30,18 Q35,26 29,32.5 Q26,26 27.5,18 Z" fill="#7d5330" stroke="#5e3d20" stroke-width="1"/>` +
+    `<path d="M11.5,10.5 L10,2.5 L17,8 Z M28.5,10.5 L30,2.5 L23,8 Z" fill="#7d5330" stroke="#5e3d20" stroke-width="1" stroke-linejoin="round"/>` +
+    `<ellipse cx="20" cy="20.5" rx="10.5" ry="13" fill="#9a6a3e" stroke="#5e3d20" stroke-width="1.1"/>` +
+    `<ellipse cx="20" cy="25" rx="6.8" ry="7.8" fill="#ead6ae"/>` +
+    `<path d="M17,22 l1.2,1.2 l1.2,-1.2 M20.6,22 l1.2,1.2 l1.2,-1.2 M18.8,26 l1.2,1.2 l1.2,-1.2 M17,29.5 l1.2,1.2 l1.2,-1.2 M20.6,29.5 l1.2,1.2 l1.2,-1.2" stroke="#a8855a" stroke-width="0.8" fill="none"/>` +
+    `<circle cx="15.3" cy="13" r="4.8" fill="#f3e3c3" stroke="#5e3d20" stroke-width="0.8"/><circle cx="24.7" cy="13" r="4.8" fill="#f3e3c3" stroke="#5e3d20" stroke-width="0.8"/>` +
+    `<circle cx="15.3" cy="13" r="3" fill="#f4b400"/><circle cx="24.7" cy="13" r="3" fill="#f4b400"/>` + eye(15.3, 13, 1.6) + eye(24.7, 13, 1.6) +
+    `<path d="M18.6,16.2 L21.4,16.2 L20,19.6 Z" fill="#d99a1c" stroke="#8a5a10" stroke-width="0.6" stroke-linejoin="round"/>` +
+    `<path d="M15.5,32.5 l-1.4,2.6 M17,32.8 l0,2.6 M18.5,32.5 l1.2,2.5 M21.5,32.5 l-1.2,2.5 M23,32.8 l0,2.6 M24.5,32.5 l1.4,2.6" stroke="#d99a1c" stroke-width="1.3" stroke-linecap="round"/>`,
+  rabbit: () =>
+    `<circle cx="5.5" cy="27" r="3.6" fill="#fbf8f2" stroke="#a8957f" stroke-width="1"/>` +
+    `<ellipse cx="16" cy="26.5" rx="11" ry="8.5" fill="#c9b39a" stroke="#7d6650" stroke-width="1.1"/>` +
+    `<ellipse cx="12.5" cy="29" rx="7" ry="5.5" fill="#bca288" stroke="#7d6650" stroke-width="0.8"/>` +
+    `<ellipse cx="16" cy="34" rx="6.5" ry="1.8" fill="#bca288" stroke="#7d6650" stroke-width="0.8"/>` +
+    `<ellipse cx="26.5" cy="33.6" rx="3" ry="1.6" fill="#d6c2aa" stroke="#7d6650" stroke-width="0.8"/>` +
+    `<path d="M24,22 L26,33" stroke="#7d6650" stroke-width="0.8"/>` +
+    `<ellipse cx="22.5" cy="7.5" rx="2.4" ry="6.5" transform="rotate(-18 22.5 7.5)" fill="#bca288" stroke="#7d6650" stroke-width="1"/>` +
+    `<ellipse cx="27.5" cy="7" rx="2.6" ry="6.5" transform="rotate(10 27.5 7)" fill="#c9b39a" stroke="#7d6650" stroke-width="1"/>` +
+    `<ellipse cx="27.6" cy="7.4" rx="1.2" ry="4.6" transform="rotate(10 27.6 7.4)" fill="#f2b8c6"/>` +
+    `<ellipse cx="28" cy="16.5" rx="7.2" ry="6" fill="#c9b39a" stroke="#7d6650" stroke-width="1.1"/>` +
+    `<circle cx="34.8" cy="17.3" r="1.1" fill="#e8849a"/><path d="M34.6,18.6 Q33.6,20.4 32.2,19.8" stroke="#7d6650" stroke-width="0.7" fill="none"/>` +
+    eye(30.5, 15),
+  chipmunk: () =>
+    `<path d="M14,33 Q1,31 2,18 Q3,6 12,8 Q16,9 14,12 Q8,13 9,20 Q10,27 17,30 Z" fill="#a8683a" stroke="#6b3f1d" stroke-width="1.1" stroke-linejoin="round"/>` +
+    `<ellipse cx="20.5" cy="25" rx="8" ry="10" fill="#d08a4a" stroke="#7a4a22" stroke-width="1.1"/>` +
+    `<path d="M14.8,18 Q13.5,25 15.6,32" stroke="#fff3df" stroke-width="1.6" fill="none"/><path d="M16.6,17 Q15.3,25 17.4,32.5" stroke="#5a3418" stroke-width="1.3" fill="none"/>` +
+    `<ellipse cx="23.5" cy="27" rx="4.4" ry="7" fill="#f3dcb8"/>` +
+    `<ellipse cx="22.5" cy="34.4" rx="5" ry="1.5" fill="#b87538" stroke="#7a4a22" stroke-width="0.8"/>` +
+    `<circle cx="21" cy="7" r="2.1" fill="#d08a4a" stroke="#7a4a22" stroke-width="0.9"/>` +
+    `<circle cx="24.5" cy="12" r="6.2" fill="#d08a4a" stroke="#7a4a22" stroke-width="1.1"/>` +
+    `<ellipse cx="27.6" cy="14.6" rx="3" ry="2.1" fill="#f3dcb8"/>` +
+    `<circle cx="30.6" cy="13.4" r="1" fill="#3a2010"/>` + eye(26.6, 10.6, 1.2) +
+    `<ellipse cx="28" cy="21.5" rx="2.6" ry="3" fill="#8a5a2b" stroke="#5a3418" stroke-width="0.7"/>` +
+    `<ellipse cx="26.4" cy="21" rx="1.6" ry="1.1" fill="#d08a4a"/><ellipse cx="29.6" cy="22" rx="1.6" ry="1.1" fill="#d08a4a"/>`,
+  hedgehog: () =>
+    `<ellipse cx="18" cy="31" rx="14" ry="4" fill="#ecd3a8" stroke="#a8855a" stroke-width="0.9"/>` +
+    `<ellipse cx="11" cy="34.3" rx="3.2" ry="1.5" fill="#c9a57a" stroke="#8a6a44" stroke-width="0.7"/><ellipse cx="24" cy="34.3" rx="3.2" ry="1.5" fill="#c9a57a" stroke="#8a6a44" stroke-width="0.7"/>` +
+    `<path d="${hedgehogSpines()}" fill="#7a5a3c" stroke="#4a3420" stroke-width="1" stroke-linejoin="round"/>` +
+    `<path d="M24,22 Q31,19.5 35,25 L38,27.6 Q36,31 30,31.5 Q24,31 24,22 Z" fill="#ecd3a8" stroke="#a8855a" stroke-width="1" stroke-linejoin="round"/>` +
+    `<circle cx="28" cy="21.6" r="1.8" fill="#d9b88a" stroke="#a8855a" stroke-width="0.7"/>` +
+    `<circle cx="37.8" cy="27.4" r="1.4" fill="#2b2118"/>` + eye(31.2, 24.6, 1.2),
+  turtle: () =>
+    `<path d="M4.5,29 L0.8,31.6 L4.8,31.8 Z" fill="#8cc070" stroke="#4a7a33" stroke-width="0.8"/>` +
+    `<path d="M5,31 L5.5,34.6 Q7.5,35.4 9.5,34.6 L9.5,31 Z M28,31 L28.5,34.6 Q30.5,35.4 32.5,34.6 L32,31 Z" fill="#6fa65a" stroke="#4a7a33" stroke-width="0.8"/>` +
+    `<path d="M29,27 Q32,22 36,22" stroke="#8cc070" stroke-width="5" stroke-linecap="round" fill="none"/>` +
+    `<ellipse cx="36" cy="22" rx="3.8" ry="3.3" fill="#8cc070" stroke="#4a7a33" stroke-width="1"/>` +
+    `<path d="M36.6,23.6 Q38,24.6 39.3,23.4" stroke="#4a7a33" stroke-width="0.7" fill="none"/>` + eye(36.8, 21, 0.9) +
+    `<path d="M3,29.5 Q4,12 18,12 Q32,12 33,29.5 Z" fill="#4f9a4a" stroke="#2f6a2c" stroke-width="1.1" stroke-linejoin="round"/>` +
+    `<path d="M13.5,16 L22.5,16 L25,22.5 L18,26.5 L11,22.5 Z M11,22.5 L5.5,26 M25,22.5 L30.5,26 M13.5,16 L10,13.8 M22.5,16 L26,13.8 M18,26.5 L18,29.5" fill="#77c06a" stroke="#2f6a2c" stroke-width="0.8" stroke-linejoin="round"/>` +
+    `<rect x="2" y="28.6" width="32" height="3.2" rx="1.6" fill="#c9b27a" stroke="#8a7440" stroke-width="0.8"/>` +
+    `<path d="M10,31 L10,34.6 Q12.5,35.6 15.5,34.6 L15.5,31 Z M22,31 L22,34.6 Q25,35.6 27.5,34.6 L27.5,31 Z" fill="#8cc070" stroke="#4a7a33" stroke-width="0.9" stroke-linejoin="round"/>`,
+  frog: () =>
+    `<ellipse cx="8" cy="29.5" rx="6.5" ry="4.8" fill="#4caf50" stroke="#2f7a33" stroke-width="1"/><ellipse cx="32" cy="29.5" rx="6.5" ry="4.8" fill="#4caf50" stroke="#2f7a33" stroke-width="1"/>` +
+    `<path d="M3.5,33 L0.8,35 L4.5,35 L5.5,33.8 L7.6,35 L8.6,33 Z M36.5,33 L39.2,35 L35.5,35 L34.5,33.8 L32.4,35 L31.4,33 Z" fill="#3e9a43" stroke="#2f7a33" stroke-width="0.7" stroke-linejoin="round"/>` +
+    `<ellipse cx="20" cy="24" rx="11" ry="10" fill="#5cc160" stroke="#2f7a33" stroke-width="1.1"/>` +
+    `<ellipse cx="20" cy="27.5" rx="6.8" ry="6.2" fill="#d8f0b0"/>` +
+    `<path d="M14,25 Q13,30 14.5,34 M26,25 Q27,30 25.5,34" stroke="#5cc160" stroke-width="2.8" stroke-linecap="round" fill="none"/>` +
+    `<path d="M12,35 L14.5,33.6 L14.5,35 L17,35 L15.5,33.6 M28,35 L25.5,33.6 L25.5,35 L23,35 L24.5,33.6" stroke="#2f7a33" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" fill="#3e9a43"/>` +
+    `<ellipse cx="20" cy="15.5" rx="10" ry="6.6" fill="#5cc160" stroke="#2f7a33" stroke-width="1.1"/>` +
+    `<path d="M11,17 Q20,19 29,17" stroke="#5cc160" stroke-width="3" fill="none"/>` +
+    `<circle cx="13.2" cy="10" r="4" fill="#5cc160" stroke="#2f7a33" stroke-width="1"/><circle cx="26.8" cy="10" r="4" fill="#5cc160" stroke="#2f7a33" stroke-width="1"/>` +
+    `<circle cx="13.2" cy="10" r="2.7" fill="#fff"/><circle cx="26.8" cy="10" r="2.7" fill="#fff"/>` + eye(13.4, 10.3, 1.5) + eye(26.6, 10.3, 1.5) +
+    `<path d="M14.5,17.5 Q20,21 25.5,17.5" stroke="#2f7a33" stroke-width="1" fill="none" stroke-linecap="round"/>` +
+    `<circle cx="12.6" cy="17" r="1.4" fill="#f2a0a8" opacity="0.7"/><circle cx="27.4" cy="17" r="1.4" fill="#f2a0a8" opacity="0.7"/>`,
+  ladybug: () =>
+    `<path d="M10.5,17 L4.5,14.5 M9.5,23 L3,23.5 M10.5,29 L5,33.5 M29.5,17 L35.5,14.5 M30.5,23 L37,23.5 M29.5,29 L35,33.5" stroke="#2b2118" stroke-width="1.4" stroke-linecap="round"/>` +
+    `<path d="M17.5,8 Q15.5,3.5 12.5,2.5 M22.5,8 Q24.5,3.5 27.5,2.5" stroke="#2b2118" stroke-width="1.1" fill="none" stroke-linecap="round"/><circle cx="12.3" cy="2.5" r="1.2" fill="#2b2118"/><circle cx="27.7" cy="2.5" r="1.2" fill="#2b2118"/>` +
+    `<ellipse cx="20" cy="10.5" rx="6.5" ry="4.6" fill="#2b2118"/><circle cx="17.4" cy="9.6" r="1.2" fill="#fff"/><circle cx="22.6" cy="9.6" r="1.2" fill="#fff"/>` +
+    `<ellipse cx="20" cy="23" rx="11" ry="11.6" fill="#e0312f" stroke="#7a1410" stroke-width="1.1"/>` +
+    `<path d="M20,12 L20,34.5" stroke="#2b2118" stroke-width="1.2"/>` +
+    [[14.5, 18, 2.4], [25.5, 18, 2.4], [13.5, 26, 2.2], [26.5, 26, 2.2], [17.2, 31.2, 1.7], [22.8, 31.2, 1.7]].map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#2b2118"/>`).join("") +
+    `<ellipse cx="15" cy="15" rx="2.4" ry="1.2" fill="#fff" opacity="0.45" transform="rotate(-30 15 15)"/>`,
+  // On the pond the duck floats (its feet are under the water); anywhere else
+  // it stands on its orange feet.
+  duck: ({ onWater = false } = {}) =>
+    (onWater ? "" : `<path d="M17.5,30.5 L17.5,33.8 M23,30.5 L23,33.8" stroke="#e8902a" stroke-width="1.4" stroke-linecap="round"/><path d="M14,35 L17.5,33.2 L21,35 Z M19.5,35 L23,33.2 L26.5,35 Z" fill="#f2a03a" stroke="#b86a14" stroke-width="0.8" stroke-linejoin="round"/>`) +
+    `<g${onWater ? ` transform="translate(0 2.6)"` : ""}>` +
+    `<path d="M6,24 L1,19 L4,25.5 Z" fill="#2b2118"/><path d="M3,22.5 Q1.5,19 4,18" stroke="#2b2118" stroke-width="0.9" fill="none"/>` +
+    `<ellipse cx="18" cy="25" rx="13" ry="7.3" fill="#d9d4c8" stroke="#7d7466" stroke-width="1.1"/>` +
+    `<path d="M24,19.5 Q32.5,20 31,26.5 Q29,31 24,31.5 Q27.5,25 24,19.5 Z" fill="#8a5a3c"/>` +
+    `<path d="M8,23.5 Q17,17.5 25.5,23 Q17,29.5 8,23.5 Z" fill="#b8b0a0" stroke="#7d7466" stroke-width="0.9"/>` +
+    `<path d="M13,23.4 L19,22.6 L19.4,24.4 L13.4,25 Z" fill="#3a5fd1"/>` +
+    `<path d="M25.5,21 Q26,14 28.5,12.5 L32.6,14.6 Q30.4,17.5 30.8,21.5 Z" fill="#2f8a4a" stroke="#1d5a2f" stroke-width="0.9" stroke-linejoin="round"/>` +
+    `<path d="M26,18.6 Q28.5,17.2 31,18.3" stroke="#fff" stroke-width="1.4" fill="none"/>` +
+    `<ellipse cx="30" cy="11.3" rx="5.4" ry="4.9" fill="#2f8a4a" stroke="#1d5a2f" stroke-width="1"/>` +
+    `<path d="M34.4,10.6 Q39.6,10.8 39.2,13 Q36.5,14.4 34,13.4 Z" fill="#f2c033" stroke="#b8860b" stroke-width="0.7" stroke-linejoin="round"/>` +
+    eye(31.2, 9.8, 1.1) + `</g>` +
+    (onWater ? `<path d="M1.5,35 Q6,33.6 10,35 M26,35 Q31,33.6 36,35" stroke="#e8f6fc" stroke-width="1.2" fill="none" stroke-linecap="round"/>` : ""),
+};
+
+export const VISITOR_IDS = Object.keys(VISITOR_ART);
+
+// The drawing of one visitor, as SVG shapes in the 40 x 36 box. Empty string
+// for an unknown id.
+export function visitorInner(id, opts = {}) {
+  const art = VISITOR_ART[id];
+  return art ? art(opts) : "";
+}
+
+// One visitor as a standalone SVG (chest reward, collection).
+export function visitorSVG(v, { cls = "", label = v.name } = {}) {
+  return `<svg class="visitor-pic ${cls}" viewBox="0 0 ${VW} ${VH}" role="img" aria-label="${label}">${visitorInner(v.id)}</svg>`;
+}
+
+// A visitor in the garden scene, feet on the ground (or water, or a branch)
+// at x, y. The outer group places it; the inner one carries the arrival hop,
+// which is a CSS transform and would otherwise replace the placing one.
+const V_SCALE = 0.8;
+function visitorInScene(v, x, y, { cls, name, onWater = false, perch = false }) {
+  const branch = perch ? `<path d="M-4,${VGROUND + 1.2} Q20,${VGROUND - 1} 44,${VGROUND + 1.6}" stroke="#8a5a33" stroke-width="3.4" stroke-linecap="round" fill="none"/>` : "";
+  return `<g transform="translate(${x - (VW / 2) * V_SCALE} ${y - VGROUND * V_SCALE}) scale(${V_SCALE})"><g class="item ${cls}" data-name="${name}">${branch}${visitorInner(v.id, { onWater })}</g></g>`;
 }
 
 // Sculpture lawn: three to a row, one strip per row.
@@ -249,7 +405,9 @@ function landscape(garden, { newVisitors = [], groundTo = MID_BOTTOM, back = tru
     if (!back && y - 28 < MIDDLE_TOP) return;
     const cls = newVisitors.includes(id) ? "visitor arrive" : "visitor";
     const name = v.name.charAt(0).toUpperCase() + v.name.slice(1);
-    s += `<text class="item ${cls}" data-name="${name}" x="${x}" y="${y}" font-size="26" text-anchor="middle">${v.emoji}</text>`;
+    const onWater = id === "duck" && sets.has("pond");
+    const perch = id === "owl" && sets.has("orchard");
+    s += visitorInScene(v, x, y, { cls, name, onWater, perch });
   });
   return s;
 }

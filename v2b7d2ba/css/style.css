@@ -433,7 +433,8 @@ button {
 .chest { width: 150px; height: 125px; }
 .chest.open .chest-glow { animation: glowpulse 1.2s ease-in-out infinite; transform-origin: 60px 46px; }
 @keyframes glowpulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
-.visitor-big { font-family: var(--emoji); font-size: 72px; line-height: 1.1; animation: hop 1s ease-out both; }
+.visitor-big { line-height: 0; animation: hop 1s ease-out both; }
+.visitor-big .visitor-pic { width: 150px; height: 135px; }
 
 .code-input {
   width: 100%;
@@ -460,8 +461,11 @@ button {
 .set-grid figure { margin: 0; text-align: center; font-size: 14px; line-height: 1.15; font-weight: 600; }
 .set-grid svg { width: 100%; height: auto; max-height: 90px; }
 .set-grid .unknown { opacity: 0.3; filter: grayscale(1); }
-.visitor-grid { display: flex; flex-wrap: wrap; gap: 6px; font-family: var(--emoji); font-size: 36px; }
-.visitor-grid .unknown { opacity: 0.2; filter: grayscale(1); }
+.visitor-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.visitor-grid figure { margin: 0; text-align: center; font-size: 13px; line-height: 1.15; font-weight: 600; }
+.visitor-grid .visitor-pic { width: 100%; height: auto; max-height: 60px; }
+/* Not found yet: a plain question mark, no outline that gives the animal away. */
+.visitor-grid .visitor-unknown { display: flex; align-items: center; justify-content: center; aspect-ratio: 40 / 36; border-radius: 12px; background: #e9e1d2; color: #9a8c76; font: 800 26px Georgia, serif; }
 
 /* effects */
 .fx { position: absolute; inset: 0; pointer-events: none; z-index: 60; overflow: hidden; }

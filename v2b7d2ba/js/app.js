@@ -15,7 +15,7 @@ import { recordRound, recordWinStat, recordSphinxStat } from "./logic/stats.js";
 import QUESTIONS from "../data/questions.js";
 import * as store from "./store.js";
 import { sfx, unlock, setMuted } from "./audio.js";
-import { flowerSVG, gardenScene, homeScene, chestSVG, sculptureSVG, coveredSVG } from "./art.js";
+import { flowerSVG, gardenScene, homeScene, chestSVG, sculptureSVG, coveredSVG, visitorSVG } from "./art.js";
 import { SKIN } from "./skin.js";
 
 // The question-asker of this skin (in the garden: Old Moss the gnome).
@@ -594,7 +594,7 @@ function showChest() {
     sfx.chest();
     const el = $("reward");
     if (r.visitor) {
-      el.innerHTML = `<div class="visitor-big">${r.visitor.emoji}</div><p><b>${esc(cap(r.visitor.name))}</b> moved into your garden!</p>`;
+      el.innerHTML = `<div class="visitor-big">${visitorSVG(r.visitor)}</div><p><b>${esc(cap(r.visitor.name))}</b> moved into your garden!</p>`;
     } else {
       el.innerHTML = `<div class="flower-row">${flowerSVG(flowerById(r.flower), { cls: "bloom" })}</div><p>A bonus <b>${esc(flowerById(r.flower).name)}</b> for your garden!</p>`;
     }
@@ -849,7 +849,11 @@ function showCollection() {
     html += `<figure>${flowerSVG(f, { cls: got ? "" : "unknown" })}<figcaption>${got ? esc(f.name) : "?"}</figcaption></figure>`;
   }
   html += `</div></div><div class="set-block"><h3>Garden visitors <small>from the daily chest</small></h3><div class="visitor-grid">`;
-  for (const v of VISITORS) html += `<span class="${st.garden.visitors.includes(v.id) ? "" : "unknown"}">${v.emoji}</span>`;
+  for (const v of VISITORS) {
+    html += st.garden.visitors.includes(v.id)
+      ? `<figure>${visitorSVG(v)}<figcaption>${esc(cap(v.name.replace(/^(a|an) /, "")))}</figcaption></figure>`
+      : `<figure class="unknown" role="img" aria-label="Not found yet"><span class="visitor-unknown">?</span><figcaption>&nbsp;</figcaption></figure>`;
+  }
   html += `</div></div><div class="set-block"><h3>Garden sculptures <small>${ASKER.carvedBy}</small></h3><div class="sculpture-grid">`;
   for (const row of collectionRows(st.sculpture)) {
     const sc = row.sculpture;
